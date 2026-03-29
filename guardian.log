@@ -8,3 +8,6 @@
   ↳ [DETECTION] Type:Cookie Threat: SQL Injection | Pattern:(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#)
 [2026-03-29 04:23:03] ID:8bc51fb8 IP:[::1]:51494 GET / | Status:ALERT:Cookie Threat: SQL Injection | Agent:curl/8.5.0
   ↳ [DETECTION] Type:Cookie Threat: SQL Injection | Pattern:(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#)
+[2026-03-29 04:24:02] ID:b79d49df IP:[::1]:35712 GET / | Status:ALERT:Cookie Threat: SQL Injection | Agent:curl/8.5.0
+  ↳ [DETECTION] Type:Cookie Threat: SQL Injection | Pattern:(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#)
+[2026-03-29 04:24:20] ID:591cdfa4 IP:185.208.158.91:52048 GET /login | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0
