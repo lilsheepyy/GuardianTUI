@@ -1,0 +1,39 @@
+# GuardianTUI Professional Configuration
+
+# --- SECURITY ENGINE SETTINGS ---
+engine:
+  # Limit scanning effort for large payloads (default 1MB)
+  max_scan_size_bytes: 1048576
+  
+  # Window to track bot behavior (seconds)
+  probing_window_seconds: 60
+  
+  # Number of unique vuln types probed before critical alert
+  probing_threshold_unique: 3
+  
+  # Total number of detections before automatic bot spam alert
+  spam_threshold_total: 5
+
+# --- AI SHIELD (ANTI-AI ABUSE) ---
+ai_protection:
+  # List of endpoints to apply AI-specific heuristics
+  endpoints:
+    - "/v1/chat"
+    - "/api/ai"
+    - "/generate"
+  
+  # Heuristic Score Threshold (Lower = stricter, default 5)
+  score_threshold: 5
+  
+  # Enable PII (Credit Cards, SSN) data leakage prevention
+  protect_pii: true
+
+  # Hard keywords to block in AI prompts
+  blocked_keywords:
+    - "internal_key"
+    - "admin_password"
+
+# --- NETWORK ---
+whitelist:
+  - "127.0.0.1"
+  - "::1"

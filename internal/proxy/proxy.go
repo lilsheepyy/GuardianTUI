@@ -66,47 +66,35 @@ type Engine struct {
 	BlockedIPs sync.Map
 	Whitelist  []*net.IPNet
 	LogChan    chan LogEntry
+	Config     *Config
 	mu         sync.RWMutex
 }
 
-func NewEngine(target string, logChan chan LogEntry) (*Engine, error) {
+func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, error) {
 	u, err := url.Parse(target)
-	if err != nil {
-		return nil, err
-	}
-
+	if err != nil { return nil, err }
 	e := &Engine{
 		TargetURL: u,
 		LogChan:   logChan,
+		Config:    cfg,
 	}
-
 	e.Proxy = httputil.NewSingleHostReverseProxy(u)
+	originalDirector := e.Proxy.Director
+	e.Proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		req.Host = u.Host
+	}
 	e.Proxy.ModifyResponse = e.modifyResponse
-	
 	return e, nil
 }
 
-func (e *Engine) IsWhitelisted(remoteIP string) bool {
+func (e *Engine) IsWhitelisted(ipStr string) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-
-	ipStr := remoteIP
-	if strings.Contains(ipStr, ":") {
-		host, _, err := net.SplitHostPort(ipStr)
-		if err == nil {
-			ipStr = host
-		}
-	}
-	
 	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return false
-	}
-
+	if ip == nil { return false }
 	for _, subnet := range e.Whitelist {
-		if subnet.Contains(ip) {
-			return true
-		}
+		if subnet.Contains(ip) { return true }
 	}
 	return false
 }
@@ -114,26 +102,18 @@ func (e *Engine) IsWhitelisted(remoteIP string) bool {
 func (e *Engine) AddWhitelist(cidr string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-
 	if !strings.Contains(cidr, "/") {
-		if net.ParseIP(cidr).To4() != nil {
-			cidr = cidr + "/32"
-		} else {
-			cidr = cidr + "/128"
-		}
+		if net.ParseIP(cidr).To4() != nil { cidr = cidr + "/32" } else { cidr = cidr + "/128" }
 	}
-
 	_, subnet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return err
-	}
-
+	if err != nil { return err }
 	e.Whitelist = append(e.Whitelist, subnet)
 	return nil
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	remoteIP := r.RemoteAddr
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil { remoteIP = r.RemoteAddr }
 	incidentID := uuid.New().String()[:8]
 
 	if e.IsWhitelisted(remoteIP) {
@@ -141,13 +121,11 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Check if IP is already permanently blocked
 	if _, blocked := e.BlockedIPs.Load(remoteIP); blocked {
 		e.serveBlockPage(w, incidentID, remoteIP, r, nil, true)
 		return
 	}
 
-	// 2. Capture Body for scanning
 	var bodyCaptured string
 	if r.Body != nil {
 		body, _ := io.ReadAll(r.Body)
@@ -155,11 +133,19 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 
-	// Decode Path and Query for more accurate scanning (prevents bypasses via URL encoding)
+	isAI := false
+	if e.Config != nil {
+		for _, ep := range e.Config.AIProtection.Endpoints {
+			if strings.HasPrefix(r.URL.Path, ep) {
+				isAI = true
+				break
+			}
+		}
+	}
+
 	decodedPath, _ := url.PathUnescape(r.URL.Path)
 	decodedQuery, _ := url.QueryUnescape(r.URL.RawQuery)
 
-	// Prepare exhaustive scan parameters
 	scanParams := scanner.ScanParams{
 		Method:    r.Method,
 		Path:      decodedPath,
@@ -168,17 +154,33 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Headers:   r.Header,
 		IP:        remoteIP,
 		UserAgent: r.UserAgent(),
+		IsAI:      isAI,
+		
+		// Injected Config
+		MaxScanSize:      e.Config.Engine.MaxScanSize,
+		ProbingWindow:    e.Config.Engine.ProbingWindow,
+		ProbingThreshold: e.Config.Engine.ProbingThreshold,
+		SpamThreshold:    e.Config.Engine.SpamThreshold,
+		AIScoreThreshold: e.Config.AIProtection.ScoreThreshold,
 	}
 
 	detection := scanner.Scan(scanParams)
 
-	// 4. Block if threat detected
+	if detection == nil && isAI && e.Config != nil {
+		bodyLower := strings.ToLower(bodyCaptured)
+		for _, kw := range e.Config.AIProtection.BlockedKeywords {
+			if strings.Contains(bodyLower, strings.ToLower(kw)) {
+				detection = &scanner.Detection{Pattern: kw, Level: scanner.LevelHigh, Type: "AI: Blocked Keyword"}
+				break
+			}
+		}
+	}
+
 	if detection != nil {
 		e.serveBlockPage(w, incidentID, remoteIP, r, detection, false)
 		return
 	}
 
-	// 5. Log and Proxy if safe
 	entry := LogEntry{
 		ID:          incidentID,
 		Timestamp:   time.Now(),
@@ -190,13 +192,11 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		FullHeaders: r.Header,
 		Payload:     bodyCaptured,
 	}
-
 	e.LogChan <- entry
 	e.Proxy.ServeHTTP(w, r)
 }
 
 func (e *Engine) serveBlockPage(w http.ResponseWriter, id, ip string, r *http.Request, d *scanner.Detection, alreadyBlocked bool) {
-	// Send log entry as blocked
 	e.LogChan <- LogEntry{
 		ID:          id,
 		Timestamp:   time.Now(),
@@ -209,20 +209,11 @@ func (e *Engine) serveBlockPage(w http.ResponseWriter, id, ip string, r *http.Re
 		Alert:       d,
 		FullHeaders: r.Header,
 	}
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
 	fmt.Fprintf(w, blockPageTmpl, id)
 }
 
-func (e *Engine) modifyResponse(res *http.Response) error {
-	return nil
-}
-
-func (e *Engine) Block(ip string) {
-	e.BlockedIPs.Store(ip, true)
-}
-
-func (e *Engine) Unblock(ip string) {
-	e.BlockedIPs.Delete(ip)
-}
+func (e *Engine) modifyResponse(res *http.Response) error { return nil }
+func (e *Engine) Block(ip string) { e.BlockedIPs.Store(ip, true) }
+func (e *Engine) Unblock(ip string) { e.BlockedIPs.Delete(ip) }

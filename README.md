@@ -1,84 +1,76 @@
-# 🛡️ GuardianTUI: IPS L7 de Alto Rendimiento y Dashboard de Seguridad en Tiempo Real
+# 🛡️ GuardianTUI: High-Performance L7 IPS & AI Shield
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/lilsheepyy/GuardianTUI)](https://goreportcard.com/report/github.com/lilsheepyy/GuardianTUI)
-[![License: MIT](https://img.shields.io/badge/Licencia-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go 1.21+](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org/dl/)
 
-**GuardianTUI** es un Sistema de Prevención de Intrusiones (IPS) de grado profesional, diseñado como un **Proxy Inverso L7** de alto rendimiento. Protege tus aplicaciones web contra ataques sofisticados y técnicas de evasión mediante un **Motor de Normalización Recursiva** y un sistema de **Bloqueo Activo** en tiempo real.
+**GuardianTUI** is a professional-grade **L7 Reverse Proxy & Intrusion Prevention System (IPS)** designed for the AI era. It protects web applications and AI APIs from sophisticated attacks using a **Heuristic Scoring Engine**, **Recursive Normalization**, and a real-time **TUI Dashboard**.
 
 ---
 
-## 🚀 Capacidades Destacadas
+## 🤖 Exclusive: AI Shield (Anti-AI Abuse)
+GuardianTUI features a specialized defense layer for Large Language Models (LLMs) and Generative AI APIs. It goes beyond simple keyword matching to understand **malicious intent**.
 
-- **🛡️ Bloqueo Activo (Active IPS)**: Intercepta y bloquea ataques instantáneamente, sirviendo una página de bloqueo HTML con un **Incident ID** único para auditoría.
-- **🔄 Motor de Normalización Recursiva**: Descapa hasta 3 niveles de codificación para detectar ataques ocultos en **Base64, URL Encoding (Doble), HTML Entities y Hex**.
-- **🔍 Escaneo Exhaustivo 360°**: Analiza meticulosamente cada rincón de la petición:
-    - **Headers**: Tanto nombres de cabecera como sus valores.
-    - **Cookies**: Desglose y validación de cada par clave-valor.
-    - **URL**: Ruta decodificada y Query Strings (parámetros `?id=...`).
-    - **Body**: Inspección profunda del cuerpo del mensaje hasta 1MB.
-- **📊 Dashboard TUI Avanzado**: Interfaz de terminal con búsqueda y filtrado en tiempo real por ID, IP o tipo de ataque.
-- **⚡ Arquitectura Sharded**: Motor thread-safe con 64 shards para una latencia ultra baja sin contención de bloqueos.
-- **🛡️ Soporte de Whitelist**: Exclusión de IPs individuales y rangos **CIDR** (ej. `10.0.0.0/8`) para tráfico de confianza.
+- **🧠 Heuristic Scoring**: Detects **Prompt Injection** and **Jailbreak** attempts (DAN, Developer Mode, Virtualization) by calculating a suspect score based on semantic patterns.
+- **🚫 PII Leakage Protection**: Automatically scans and blocks sensitive data (Credit Cards, SSN) before they reach your AI model.
+- **🛡️ Instruction Override Defense**: Blocks attempts to bypass system prompts (e.g., "ignore all previous instructions").
+- **🧩 Structural Hijacking Detection**: Identifies attempts to inject system-level delimiters (`Assistant:`, `System:`) to manipulate model behavior.
 
 ---
 
-## ✨ Inteligencia de Detección
+## 🚀 Key Features
 
-### 1. OWASP Top 10 y Ataques Modernos
-- **SQL Injection (SQLi)**: Detección avanzada incluyendo bypasses como `' OR TRUE--` y `admin' #`.
-- **Cross-Site Scripting (XSS)**: Bloqueo de etiquetas, eventos JS y payloads modernos como `<svg/onload=`.
-- **RCE / Command Injection**: Detecta ejecución de comandos con evasiones como `${IFS}` y pipes.
-- **SSTI (Server-Side Template Injection)**: Protección para Jinja2, Twig, Mako (`{{7*7}}`, `${...}`).
-- **NoSQL Injection**: Bloqueo de operadores de MongoDB maliciosos (`$gt`, `$regex`, `$where`).
-- **Path Traversal / LFI**: Evita el acceso a `/etc/passwd`, `.env` y archivos sensibles.
-
-### 2. Detección de Comportamiento (Anti-Bot)
-- **Vulnerability Probing (Diverse)**: Identifica IPs que prueban múltiples tipos de vulnerabilidades en corto tiempo.
-- **Probing Spam**: Detecta ráfagas de ataques automatizados incluso si son variados.
-- **Scanner Detection**: Bloquea por firma a herramientas como `sqlmap`, `nmap`, `nuclei`, `burp`, etc.
+- **🔄 Recursive Normalization Engine**: Automatically decodes up to 3 layers of obfuscation (**Base64, Hex, Double URL Encoding, HTML Entities**).
+- **🛡️ Active Blocking**: Intercepts threats and serves a professional HTML block page with a unique **Incident ID**.
+- **📊 Real-time TUI Chart**: High-performance terminal dashboard with live traffic activity and threat charts.
+- **🔍 360° Inspection**: Deep packet inspection of **Headers, Cookies, Query Parameters, and Body** (up to 1MB).
+- **⚙️ Fully Configurable**: Control every threshold, window, and security rule via `config.yaml` and `ai.json`.
+- **🌐 Zero-Config HTTPS**: Automated SSL provisioning via **Let's Encrypt** or custom/self-signed certificates.
 
 ---
 
-## 🛠️ Inicio Rápido
+## 🛠️ Quick Start
 
-### Compilar e Iniciar
+### Build & Run
 ```bash
 go build -o guardiantui main.go
-./guardiantui -listen :8080 -target https://tu-sitio-web.com
+./guardiantui -target http://localhost:3000
 ```
 
-### Probar la Protección
-```bash
-# Prueba de SQLi (Codificado)
-curl -G --data-urlencode "id=' OR 1=1" http://localhost:8080/
-
-# Prueba de Evasión Base64 (Payload: ' or '1'='1)
-curl http://localhost:8080/ -H "X-Attack: J29yIDEnPScx"
+### Advanced AI Protection
+Define your AI endpoints in `config.yaml`:
+```yaml
+ai_protection:
+  endpoints: ["/v1/chat"]
+  score_threshold: 5
 ```
 
 ---
 
-## ⌨️ Atajos de Teclado (TUI)
+## ⌨️ TUI Shortcuts
 
-| Tecla | Acción |
+| Key | Action |
 | :--- | :--- |
-| `q` / `Ctrl+C` | Salir de GuardianTUI |
-| `/` | **Modo Búsqueda**: Filtra logs por ID, IP, Ruta o Ataque |
-| `Esc` | Limpiar filtro o cancelar búsqueda |
-| `↑` / `↓` | Desplazarse por el historial de peticiones |
+| `q` / `Ctrl+C` | Quit |
+| `/` | **Search Mode**: Filter logs by ID, IP, or Attack Type |
+| `Esc` | Clear filter or exit search |
+| `↑` / `↓` | Scroll through request history |
 
 ---
 
-## 📝 Registro Forense
-
-Logs detallados en `guardian.log` con contexto de detección:
+## 📝 Forensics & Logs
+Detailed reports in `guardian.log` with unique incident IDs for easy auditing:
 ```log
-[2026-03-29 23:51:43] ID:b6e91bc4 IP:[::1]:47820 GET / | Status:BLOCKED | Agent:curl/8.5.0
-  ↳ [DETECTION] Type:Bot: Malicious Scanner | Pattern:curl
+[2026-03-29 23:51:43] ID:b6e91bc4 IP:1.2.3.4 POST /v1/chat | Status:BLOCKED:AI Abuse | Agent:python-requests/2.31
+  ↳ [DETECTION] Type:AI Abuse: High Suspect Score (7) | Patterns: Instruction Override, Persona Hijack
 ```
 
 ---
 
-## 📜 Licencia
-Distribuido bajo la **Licencia MIT**.
+## 🏷️ SEO & Metadata
+#Cybersecurity #WAF #IPS #LLMSecurity #PromptInjection #JailbreakDefense #Golang #APIProtection #InfoSec #OpenSource #DevSecOps #AIGovernance #TerminalUI
+
+---
+
+## 📜 License
+Distributed under the **MIT License**.

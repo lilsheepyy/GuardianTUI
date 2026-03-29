@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"guardiantui/internal/proxy"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -30,7 +31,17 @@ var (
 	searchStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("86")).
 			Bold(true)
+
+	barSafeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	barAlertStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 )
+
+type tickMsg time.Time
+
+type stats struct {
+	safe   int
+	alerts int
+}
 
 type model struct {
 	table       table.Model
@@ -41,6 +52,11 @@ type model struct {
 	lastAlert   string
 	searching   bool
 	searchInput textinput.Model
+	
+	// Stats for Chart
+	history     []stats
+	current     stats
+	maxVal      int
 }
 
 func NewModel(logChan chan proxy.LogEntry) model {
@@ -80,14 +96,23 @@ func NewModel(logChan chan proxy.LogEntry) model {
 		logChan:     logChan,
 		logs:        make([]proxy.LogEntry, 0),
 		searchInput: ti,
+		history:     make([]stats, 60), // Last 60 seconds
+		maxVal:      10,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return waitForActivity(m.logChan)
+	return tea.Batch(
+		waitForActivity(m.logChan),
+		tickEverySecond(),
+	)
 }
 
-type logMsg proxy.LogEntry
+func tickEverySecond() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
 
 func waitForActivity(c chan proxy.LogEntry) tea.Cmd {
 	return func() tea.Msg {
@@ -95,13 +120,15 @@ func waitForActivity(c chan proxy.LogEntry) tea.Cmd {
 	}
 }
 
+type logMsg proxy.LogEntry
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.table.SetHeight(m.height - 13)
+		m.table.SetHeight(m.height - 18) // Adjust for chart
 		totalWidth := m.width - 6
 		m.table.SetColumns([]table.Column{
 			{Title: "ID", Width: 8},
@@ -110,6 +137,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			{Title: "Status", Width: 35},
 			{Title: "Path", Width: totalWidth - 8 - 10 - 16 - 35 - 6},
 		})
+
+	case tickMsg:
+		// Move history
+		m.history = append(m.history[1:], m.current)
+		m.current = stats{0, 0}
+		
+		// Update max for scaling
+		m.maxVal = 5
+		for _, s := range m.history {
+			if s.safe+s.alerts > m.maxVal {
+				m.maxVal = s.safe + s.alerts
+			}
+		}
+		return m, tickEverySecond()
 
 	case tea.KeyMsg:
 		if m.searching {
@@ -125,7 +166,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateTable()
 			return m, tiCmd
 		}
-
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -140,7 +180,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case logMsg:
-		m.logs = append(m.logs, proxy.LogEntry(msg))
+		entry := proxy.LogEntry(msg)
+		if entry.Alert != nil || entry.Blocked {
+			m.current.alerts++
+		} else {
+			m.current.safe++
+		}
+		
+		m.logs = append(m.logs, entry)
 		if len(m.logs) > 500 {
 			m.logs = m.logs[1:]
 		}
@@ -154,50 +201,63 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) updateTable() {
 	query := strings.ToLower(m.searchInput.Value())
 	rows := make([]table.Row, 0)
-
 	for _, entry := range m.logs {
 		status := "OK"
 		if entry.Alert != nil {
 			status = fmt.Sprintf("!! %s !!", entry.Alert.Type)
-			m.lastAlert = fmt.Sprintf("[%s] %s attempted %s on %s (ID: %s)", 
-				entry.Timestamp.Format("15:04:05"), 
-				entry.RemoteIP, 
-				entry.Alert.Type, 
-				entry.Path,
-				entry.ID)
+			m.lastAlert = fmt.Sprintf("[%s] %s attempted %s on %s", 
+				entry.Timestamp.Format("15:04:05"), entry.RemoteIP, entry.Alert.Type, entry.Path)
 		}
-		if entry.Blocked {
-			status = "BLOCKED"
-		}
-
-		// Filter logic
-		match := query == "" || 
-				 strings.Contains(strings.ToLower(entry.ID), query) || 
+		if entry.Blocked { status = "BLOCKED" }
+		match := query == "" || strings.Contains(strings.ToLower(entry.ID), query) || 
 				 strings.Contains(strings.ToLower(entry.RemoteIP), query) || 
 				 strings.Contains(strings.ToLower(status), query) || 
 				 strings.Contains(strings.ToLower(entry.Path), query)
-
 		if match {
-			rows = append(rows, table.Row{
-				entry.ID,
-				entry.Timestamp.Format("15:04:05"),
-				entry.RemoteIP,
-				status,
-				entry.Path,
-			})
+			rows = append(rows, table.Row{entry.ID, entry.Timestamp.Format("15:04:05"), entry.RemoteIP, status, entry.Path})
 		}
 	}
 	m.table.SetRows(rows)
-	if query == "" {
-		m.table.GotoBottom()
+	if query == "" { m.table.GotoBottom() }
+}
+
+func (m model) renderChart() string {
+	height := 5
+	var b strings.Builder
+	b.WriteString("   Threats per Minute (Live Activity)\n")
+	
+	for h := height; h > 0; h-- {
+		b.WriteString(fmt.Sprintf("%2d ", h*(m.maxVal/height)))
+		for _, s := range m.history {
+			safeH := 0
+			alertH := 0
+			if m.maxVal > 0 {
+				safeH = (s.safe * height) / m.maxVal
+				alertH = (s.alerts * height) / m.maxVal
+			}
+			
+			if h <= alertH {
+				b.WriteString(barAlertStyle.Render("█"))
+			} else if h <= (safeH + alertH) {
+				b.WriteString(barSafeStyle.Render("█"))
+			} else {
+				b.WriteString(" ")
+			}
+		}
+		b.WriteString("\n")
 	}
+	b.WriteString("      " + strings.Repeat("-", 60) + "\n")
+	b.WriteString("      60s ago" + strings.Repeat(" ", 40) + "Now\n")
+	return b.String()
 }
 
 func (m model) View() string {
 	var s strings.Builder
-	
 	s.WriteString(headerStyle.Render("🛡️ GUARDIAN TUI - Real-time IPS & Block Engine"))
 	s.WriteString("\n\n")
+	
+	s.WriteString(m.renderChart())
+	s.WriteString("\n")
 	
 	if m.searching {
 		s.WriteString(searchStyle.Render("SEARCH: ") + m.searchInput.View())
@@ -207,18 +267,15 @@ func (m model) View() string {
 		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("Press / to search incident ID, IP or Attack type..."))
 	}
 	s.WriteString("\n")
-	
 	s.WriteString(baseStyle.Render(m.table.View()))
-	s.WriteString("\n\n")
+	s.WriteString("\n")
 	
 	if m.lastAlert != "" {
 		s.WriteString(alertStyle.Render("LATEST BLOCK: " + m.lastAlert))
 	} else {
 		s.WriteString(okStyle.Render("SYSTEM STATUS: MONITORING - NO THREATS DETECTED"))
 	}
-	
 	s.WriteString("\n\n")
 	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("q: quit | /: search | esc: clear search | arrows: scroll"))
-	
 	return s.String()
 }
