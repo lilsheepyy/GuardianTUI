@@ -10,18 +10,22 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type LogEntry struct {
-	ID        string
-	Timestamp time.Time
-	RemoteIP  string
-	Method    string
-	Path      string
-	Agent     string
-	Status    int
-	Blocked   bool
-	Alert     *scanner.Detection
+	ID          string
+	Timestamp   time.Time
+	RemoteIP    string
+	Method      string
+	Path        string
+	Agent       string
+	Status      int
+	Blocked     bool
+	Alert       *scanner.Detection
+	FullHeaders http.Header
+	Payload     string
 }
 
 type Engine struct {
@@ -50,8 +54,11 @@ func NewEngine(target string, logChan chan LogEntry) (*Engine, error) {
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	remoteIP := r.RemoteAddr
+	incidentID := uuid.New().String()[:8]
+
 	if _, blocked := e.BlockedIPs.Load(remoteIP); blocked {
 		e.LogChan <- LogEntry{
+			ID:        incidentID,
 			Timestamp: time.Now(),
 			RemoteIP:  remoteIP,
 			Method:    r.Method,
@@ -64,25 +71,31 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Scan headers and path
-	payload := fmt.Sprintf("%s %s %v", r.Method, r.URL.Path, r.Header)
+	headersStr := fmt.Sprintf("%v", r.Header)
+	payload := fmt.Sprintf("%s %s %s", r.Method, r.URL.Path, headersStr)
 	detection := scanner.Scan(payload, remoteIP, r.UserAgent())
 
+	var bodyCaptured string
 	// Scan Body if possible
 	if r.Body != nil {
 		body, _ := io.ReadAll(r.Body)
+		bodyCaptured = string(body)
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
-		if d := scanner.Scan(string(body), remoteIP, r.UserAgent()); d != nil {
+		if d := scanner.Scan(bodyCaptured, remoteIP, r.UserAgent()); d != nil {
 			detection = d
 		}
 	}
 
 	entry := LogEntry{
-		Timestamp: time.Now(),
-		RemoteIP:  remoteIP,
-		Method:    r.Method,
-		Path:      r.URL.Path,
-		Agent:     r.UserAgent(),
-		Alert:     detection,
+		ID:          incidentID,
+		Timestamp:   time.Now(),
+		RemoteIP:    remoteIP,
+		Method:      r.Method,
+		Path:        r.URL.Path,
+		Agent:       r.UserAgent(),
+		Alert:       detection,
+		FullHeaders: r.Header,
+		Payload:     bodyCaptured,
 	}
 
 	if detection != nil && detection.Level == scanner.LevelCritical {
@@ -95,7 +108,6 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (e *Engine) modifyResponse(res *http.Response) error {
-	// Here we could capture status codes if needed
 	return nil
 }
 

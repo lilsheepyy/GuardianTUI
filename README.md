@@ -1,62 +1,79 @@
-# 🛡️ GuardianTUI
+# 🛡️ GuardianTUI: High-Performance L7 IPS & Real-Time Network Security Dashboard
 
-**GuardianTUI** is a High-Performance, Real-Time L7 Intrusion Prevention System (IPS) and Reverse Proxy written in pure Go. It features a modern Terminal User Interface (TUI) and comprehensive logging, designed for sysadmins and security professionals to monitor, detect, and block malicious HTTP traffic on the fly.
+[![Go Report Card](https://goreportcard.com/badge/github.com/lilsheepyy/GuardianTUI)](https://goreportcard.com/report/github.com/lilsheepyy/GuardianTUI)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go 1.21+](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org/dl/)
 
-## ✨ Features
-- **Real-Time TUI**: Built with Bubble Tea, offering a live dashboard of incoming traffic and alerts.
-- **Advanced Threat Detection Engine**:
-  - SQL Injection (SQLi) & Evasions
-  - Cross-Site Scripting (XSS)
-  - Local/Remote File Inclusion (LFI/RFI)
-  - Command Injection & Remote Code Execution (RCE)
-  - Path Traversal & Sensitive File Exposure (`.env`, `.git`, etc.)
-  - Malicious Scanner & Bot Detection (nmap, sqlmap, nuclei, burpsuite)
-  - Stateful Rate Limiting & DoS / Brute Force Protection
-- **Sysadmin Friendly Logging**: Outputs clean, parseable logs to `guardian.log` for easy integration with SIEMs or Fail2Ban.
-- **Instant Blocking**: Intercept and drop malicious requests instantly.
-- **Zero Dependencies**: Distributed as a single static binary.
+**GuardianTUI** is a carrier-grade, open-source **Intrusion Prevention System (IPS)** and **L7 Reverse Proxy** built for speed, security, and visibility. Powered by a high-performance sharded engine in Go, it protects your backend applications against the **OWASP Top 10** while providing a beautiful, real-time **TUI (Terminal User Interface)** for security monitoring.
 
-## 🚀 Installation
+---
 
-Ensure you have Go 1.21+ installed.
+## 🚀 Why GuardianTUI?
 
+In an era of automated attacks, static logs aren't enough. GuardianTUI gives you **active defense** and **instant visibility**. 
+
+- **🛡️ Active L7 Firewall**: Deep Packet Inspection (DPI) to block SQLi, XSS, RCE, and more.
+- **📊 Live TUI Dashboard**: Monitor every request and threat as they happen, right from your terminal.
+- **🧠 Intelligent Threat Detection**: Signature-based and stateful heuristic analysis.
+- **⚡ Ultra-Low Latency**: Built in Go for high-throughput environments.
+- **🔍 Forensic-Ready Logs**: Detailed incident reports with unique IDs, full headers, and payload samples.
+
+---
+
+## ✨ Advanced Security Features
+
+- **OWASP Protection**: Battle-tested regex patterns for SQL Injection, XSS, Path Traversal, and Command Injection.
+- **Bot & Scanner Mitigation**: Passive detection of tools like `sqlmap`, `nmap`, `nuclei`, `dirbuster`, and `burpsuite`.
+- **Stateful Rate Limiting**: Automatic detection of **DoS / Brute Force** attacks via sliding window analysis.
+- **Sensitive Data Shield**: Prevents unauthorized access to `.env`, `.git`, AWS credentials, and configuration files.
+- **One-Click Banning**: Instant manual IP blocking via the TUI.
+
+---
+
+## 🛠️ Installation & Quick Start
+
+### 1. Build from Source
 ```bash
 git clone https://github.com/lilsheepyy/GuardianTUI.git
 cd GuardianTUI
 go build -o guardiantui main.go
 ```
 
-## 🛠️ Usage
-
-Wrap your existing backend application with GuardianTUI to instantly protect it:
-
+### 2. Protect your API
 ```bash
 ./guardiantui -listen :9090 -target http://localhost:8080
 ```
-- `-listen`: Address and port for GuardianTUI to bind to (default: `:9090`)
-- `-target`: The backend URL you want to protect (default: `http://localhost:8080`)
-- `-log`: Path to the log file (default: `guardian.log`)
 
-### TUI Controls
-- `q` or `ctrl+c`: Quit the application
-- `b`: Block the currently selected IP
-- `Up/Down Arrows`: Scroll through the live traffic log
+---
 
-## 📝 Log Format
-Logs are written in a structured format suitable for grepping or ingestion:
-```
-[YYYY-MM-DD HH:MM:SS] <IP> <METHOD> <PATH> | Status: <STATUS> | Agent: <USER_AGENT>
-```
+## 📝 Forensic Logging (Admin-Ready)
 
-**Example:**
+GuardianTUI generates highly detailed logs in `guardian.log`, perfect for sysadmins and security auditors:
+
 ```log
-[2026-03-29 16:11:05] 10.0.0.5 POST /login | Status: OK | Agent: Mozilla/5.0
-[2026-03-29 16:11:12] 192.168.1.15 GET /?id=1' OR '1'='1' | Status: ALERT:SQL Injection | Agent: sqlmap/1.8.3
-[2026-03-29 16:12:00] 192.168.1.15 GET /?id=1' OR '1'='1' | Status: BLOCKED | Agent: sqlmap/1.8.3
+[2026-03-29 16:11:12] ID:8f2a1c4b IP:192.168.1.15 GET /api/v1?id=1' OR '1'='1' | Status:ALERT:SQL Injection | Agent:sqlmap/1.8.3
+  ↳ [DETECTION] Type:SQL Injection | Pattern:(?i)(union|select|drop|insert|truncate|delete|1=1|' OR '1'='1')
+  ↳ [PAYLOAD] id=1' OR '1'='1'
 ```
 
-## 🤝 Contributing
-Contributions, issues, and feature requests are welcome!
+---
+
+## ⌨️ TUI Keybindings
+
+| Key | Action |
+| :--- | :--- |
+| `q` / `Ctrl+C` | Quit GuardianTUI |
+| `b` | **Block** the selected IP address instantly |
+| `↑` / `↓` | Scroll through the request history |
+
+---
+
+## 🏷️ Tags & SEO
+#CyberSecurity #Golang #IDS #IPS #Networking #OpenSource #DevSecOps #InfoSec #L7Firewall #TUI #ReverseProxy #OWASP #ThreatDetection #SecurityMonitoring
+
+---
 
 ## 📜 License
-MIT License
+Distributed under the **MIT License**. See `LICENSE` for more information.
+
+**Keywords**: *L7 IPS, Go Security Tool, Terminal Dashboard, Network Intrusion Prevention, DDoS Mitigation, Real-time Traffic Monitoring, Golang Firewall.*

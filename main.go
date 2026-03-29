@@ -45,8 +45,9 @@ func main() {
 				statusStr = "BLOCKED"
 			}
 
-			logLine := fmt.Sprintf("[%s] %s %s %s | Status: %s | Agent: %s\n",
+			logLine := fmt.Sprintf("[%s] ID:%s IP:%s %s %s | Status:%s | Agent:%s\n",
 				entry.Timestamp.Format("2006-01-02 15:04:05"),
+				entry.ID,
 				entry.RemoteIP,
 				entry.Method,
 				entry.Path,
@@ -54,6 +55,20 @@ func main() {
 				entry.Agent,
 			)
 			f.WriteString(logLine)
+
+			// If it's an alert, add extra debug info for the admin
+			if entry.Alert != nil {
+				extraInfo := fmt.Sprintf("  ↳ [DETECTION] Type:%s | Pattern:%s\n", entry.Alert.Type, entry.Alert.Pattern)
+				f.WriteString(extraInfo)
+				if entry.Payload != "" {
+					// Guardamos un fragmento del payload para no saturar el log pero dar contexto
+					payloadSample := entry.Payload
+					if len(payloadSample) > 200 {
+						payloadSample = payloadSample[:200] + "..."
+					}
+					f.WriteString(fmt.Sprintf("  ↳ [PAYLOAD] %s\n", payloadSample))
+				}
+			}
 		}
 	}()
 
