@@ -39,10 +39,10 @@ type model struct {
 func NewModel(logChan chan proxy.LogEntry) model {
 	columns := []table.Column{
 		{Title: "Time", Width: 10},
-		{Title: "IP", Width: 15},
-		{Title: "Method", Width: 8},
-		{Title: "Path", Width: 30},
-		{Title: "Status", Width: 15},
+		{Title: "IP", Width: 16},
+		{Title: "Method", Width: 7},
+		{Title: "Status", Width: 22},
+		{Title: "Path", Width: 40},
 	}
 
 	t := table.New(
@@ -89,21 +89,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Adjust table height dynamically (leave space for header/footer)
 		m.table.SetHeight(m.height - 12)
 
-		// Proportional column resizing
-		totalWidth := m.width - 10
-		if totalWidth < 60 {
-			totalWidth = 60
+		totalWidth := m.width - 6
+		if totalWidth < 80 {
+			totalWidth = 80
 		}
 		
 		m.table.SetColumns([]table.Column{
 			{Title: "Time", Width: 10},
-			{Title: "IP", Width: 18},
-			{Title: "Method", Width: 8},
-			{Title: "Path", Width: totalWidth - 10 - 18 - 8 - 20},
-			{Title: "Status", Width: 20},
+			{Title: "IP", Width: 16},
+			{Title: "Method", Width: 7},
+			{Title: "Status", Width: 22},
+			{Title: "Path", Width: totalWidth - 10 - 16 - 7 - 22 - 6},
 		})
 
 	case tea.KeyMsg:
@@ -142,8 +140,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				entry.Timestamp.Format("15:04:05"),
 				entry.RemoteIP,
 				entry.Method,
-				entry.Path,
 				status,
+				entry.Path,
 			}
 		}
 		m.table.SetRows(rows)
