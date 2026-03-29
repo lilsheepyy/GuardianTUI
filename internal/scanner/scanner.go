@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"sync"
