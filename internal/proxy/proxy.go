@@ -73,7 +73,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Scan headers and path
 	headersStr := fmt.Sprintf("%v", r.Header)
 	payload := fmt.Sprintf("%s %s %s", r.Method, r.URL.Path, headersStr)
-	detection := scanner.Scan(payload, remoteIP, r.UserAgent())
+	detection := scanner.Scan(payload, remoteIP, r.Header, r.UserAgent())
 
 	var bodyCaptured string
 	// Scan Body if possible
@@ -81,7 +81,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		bodyCaptured = string(body)
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
-		if d := scanner.Scan(bodyCaptured, remoteIP, r.UserAgent()); d != nil {
+		if d := scanner.Scan(bodyCaptured, remoteIP, r.Header, r.UserAgent()); d != nil {
 			detection = d
 		}
 	}

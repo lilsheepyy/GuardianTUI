@@ -40,50 +40,34 @@ var patterns = []Detection{
 	{Pattern: `(?i)(\.env|wp-config\.php|id_rsa|\.aws/credentials|/.git/|docker-compose\.yml)`, Level: LevelCritical, Type: "Sensitive File Access"},
 }
 
-// Known malicious or scanner user agents
+// Known malicious, scanner, or aggressive bot user agents
 var maliciousAgents = []string{
-	"sqlmap", "nmap", "nikto", "dirbuster", "masscan", "zgrab", "nuclei", "burpsuite", "postmanruntime", "gobuster", "wfuzz",
+	// Vulnerability Scanners
+	"sqlmap", "nmap", "nikto", "dirbuster", "masscan", "zgrab", "nuclei", "burpsuite",
+	"acunetix", "nessus", "qualys", "openvas", "netsparker", "arachni", "w3af", "havij",
+
+	// Discovery & Enumeration Tools
+	"gobuster", "wfuzz", "ffuf", "dirsearch", "feroxbuster", "rustbuster", "dirb",
+	"amass", "subfinder", "httpx", "dnsx", "gau", "waybackpack", "hakrawler",
+	"kiterunner", "arjun", "paramminer", "dotdotpwn",
+
+	// CMS & Specialized Scanners
+	"wpscan", "joomscan", "droopescan", "commix", "sslscan", "sslyze",
+
+	// Exploitation Frameworks
+	"metasploit", "msfconsole", "armitage", "beef",
+
+	// Recon & Aggressive Crawlers
+	"shodan", "censys", "binaryedge", "mj12bot", "ahrefsbot", "semrushbot", "dotbot",
+	"rogerbot", "exabot", "proximic", "gigabot", "ia_archiver",
 }
 
-// Rate Limiting State
-var (
-	ipTracker = make(map[string][]time.Time)
-	trackerMu sync.Mutex
-)
-
-const (
-	RateLimitWindow   = 10 * time.Second
-	MaxRequestsPerWin = 50 // Threshold for DoS / Brute Force
-)
-
-// CheckRateLimit tracks requests and detects anomalies
-func CheckRateLimit(ip string) *Detection {
-	trackerMu.Lock()
-	defer trackerMu.Unlock()
-
-	now := time.Now()
-	var recent []time.Time
-
-	// Clean up old requests and keep recent ones
-	for _, t := range ipTracker[ip] {
-		if now.Sub(t) < RateLimitWindow {
-			recent = append(recent, t)
-		}
-	}
-	recent = append(recent, now)
-	ipTracker[ip] = recent
-
-	if len(recent) > MaxRequestsPerWin {
-		return &Detection{
-			Pattern: "High Request Rate",
-			Level:   LevelHigh,
-			Type:    "DoS / Brute Force",
-		}
-	}
-	return nil
+// Scanner-specific headers used by various tools
+var scannerHeaders = []string{
+	"X-Scanner", "X-Scanning-IP", "X-Scan-Type", "X-Bug-Bounty", "X-Scan-ID",
 }
 
-func Scan(input string, ip string, userAgent string) *Detection {
+func Scan(input string, ip string, rHeaders map[string][]string, userAgent string) *Detection {
 	// 1. Check Rate Limiting First
 	if d := CheckRateLimit(ip); d != nil {
 		return d
@@ -101,14 +85,25 @@ func Scan(input string, ip string, userAgent string) *Detection {
 		}
 	}
 
-	// 3. Regex Signature Matching for Payloads
+	// 3. Check for Scanner-Specific Headers
+	for _, h := range scannerHeaders {
+		if _, ok := rHeaders[h]; ok {
+			return &Detection{
+				Pattern: h,
+				Level:   LevelMedium,
+				Type:    "Scanner Signature Header",
+			}
+		}
+	}
+
+	// 4. Regex Signature Matching for Payloads
 	for _, d := range patterns {
 		re := regexp.MustCompile(d.Pattern)
 		if re.MatchString(input) {
 			return &d
 		}
 	}
-
+...
 	// 4. Payload Anomaly (Oversized Body or Headers)
 	if len(input) > 8000 {
 		return &Detection{
