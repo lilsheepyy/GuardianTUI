@@ -3,6 +3,8 @@ package scanner
 import (
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 )
 
 type ThreatLevel string
@@ -20,25 +22,102 @@ type Detection struct {
 	Type    string
 }
 
+// Advanced Regex Patterns (OWASP Top 10)
 var patterns = []Detection{
-	{Pattern: `(?i)(union select|select.*from|drop table|insert into|truncate table|delete from)`, Level: LevelCritical, Type: "SQL Injection"},
-	{Pattern: `(?i)(<script|alert\(|onerror|onclick|onload)`, Level: LevelHigh, Type: "XSS Attempt"},
-	{Pattern: `(?i)(\.\.\/|\.\.\\|/etc/passwd|/windows/win\.ini|/proc/self/)`, Level: LevelCritical, Type: "Path Traversal"},
-	{Pattern: `(?i)(admin|config|backup|setup|install)\.php`, Level: LevelMedium, Type: "Sensitive File Access"},
-	{Pattern: `(?i)(exec\(|system\(|passthru\(|shell_exec\()`, Level: LevelCritical, Type: "Remote Code Execution"},
+	// SQL Injection & Evasions
+	{Pattern: `(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1)`, Level: LevelCritical, Type: "SQL Injection"},
+	
+	// Cross-Site Scripting (XSS)
+	{Pattern: `(?i)(<script.*?>|javascript:|alert\s*\(|onerror\s*=|onclick\s*=|onload\s*=|document\.cookie)`, Level: LevelHigh, Type: "XSS Attempt"},
+	
+	// Path Traversal / LFI / RFI
+	{Pattern: `(?i)(\.\.\/|\.\.\\|/etc/passwd|/windows/win\.ini|/proc/self/environ|file://|php://filter)`, Level: LevelCritical, Type: "Path Traversal / LFI"},
+	
+	// Command Injection / RCE
+	{Pattern: `(?i)(;\s*ls|\|\s*id|` + "`" + `id` + "`" + `|\$\(id\)|exec\s*\(|system\s*\(|passthru\s*\(|shell_exec\s*\(|eval\s*\()`, Level: LevelCritical, Type: "Command Injection / RCE"},
+	
+	// Sensitive Data Exposure / Config Files
+	{Pattern: `(?i)(\.env|wp-config\.php|id_rsa|\.aws/credentials|/.git/|docker-compose\.yml)`, Level: LevelCritical, Type: "Sensitive File Access"},
 }
 
-func Scan(input string) *Detection {
+// Known malicious or scanner user agents
+var maliciousAgents = []string{
+	"sqlmap", "nmap", "nikto", "dirbuster", "masscan", "zgrab", "nuclei", "burpsuite", "postmanruntime", "gobuster", "wfuzz",
+}
+
+// Rate Limiting State
+var (
+	ipTracker = make(map[string][]time.Time)
+	trackerMu sync.Mutex
+)
+
+const (
+	RateLimitWindow   = 10 * time.Second
+	MaxRequestsPerWin = 50 // Threshold for DoS / Brute Force
+)
+
+// CheckRateLimit tracks requests and detects anomalies
+func CheckRateLimit(ip string) *Detection {
+	trackerMu.Lock()
+	defer trackerMu.Unlock()
+
+	now := time.Now()
+	var recent []time.Time
+
+	// Clean up old requests and keep recent ones
+	for _, t := range ipTracker[ip] {
+		if now.Sub(t) < RateLimitWindow {
+			recent = append(recent, t)
+		}
+	}
+	recent = append(recent, now)
+	ipTracker[ip] = recent
+
+	if len(recent) > MaxRequestsPerWin {
+		return &Detection{
+			Pattern: "High Request Rate",
+			Level:   LevelHigh,
+			Type:    "DoS / Brute Force",
+		}
+	}
+	return nil
+}
+
+func Scan(input string, ip string, userAgent string) *Detection {
+	// 1. Check Rate Limiting First
+	if d := CheckRateLimit(ip); d != nil {
+		return d
+	}
+
+	// 2. Check User Agent against Threat Intel
+	uaLower := strings.ToLower(userAgent)
+	for _, agent := range maliciousAgents {
+		if strings.Contains(uaLower, agent) {
+			return &Detection{
+				Pattern: agent,
+				Level:   LevelHigh,
+				Type:    "Malicious Scanner / Bot",
+			}
+		}
+	}
+
+	// 3. Regex Signature Matching for Payloads
 	for _, d := range patterns {
 		re := regexp.MustCompile(d.Pattern)
 		if re.MatchString(input) {
 			return &d
 		}
 	}
-	// Brute force detection would be stateful, we'll keep it simple for now
-	if len(input) > 2000 {
-		return &Detection{Pattern: "Oversized Payload", Level: LevelMedium, Type: "Dos Attempt"}
+
+	// 4. Payload Anomaly (Oversized Body or Headers)
+	if len(input) > 8000 {
+		return &Detection{
+			Pattern: "Oversized Payload (>8KB)",
+			Level:   LevelMedium,
+			Type:    "Anomaly / Potential Buffer Overflow",
+		}
 	}
+
 	return nil
 }
 

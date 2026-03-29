@@ -65,13 +65,13 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Scan headers and path
 	payload := fmt.Sprintf("%s %s %v", r.Method, r.URL.Path, r.Header)
-	detection := scanner.Scan(payload)
+	detection := scanner.Scan(payload, remoteIP, r.UserAgent())
 
 	// Scan Body if possible
 	if r.Body != nil {
 		body, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
-		if d := scanner.Scan(string(body)); d != nil {
+		if d := scanner.Scan(string(body), remoteIP, r.UserAgent()); d != nil {
 			detection = d
 		}
 	}
