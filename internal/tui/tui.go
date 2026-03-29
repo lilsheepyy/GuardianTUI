@@ -81,6 +81,7 @@ func waitForActivity(c chan proxy.LogEntry) tea.Cmd {
 		return logMsg(<-c)
 	}
 }
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
@@ -93,6 +94,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Proportional column resizing
 		totalWidth := m.width - 10
+		if totalWidth < 60 {
+			totalWidth = 60
+		}
+		
 		m.table.SetColumns([]table.Column{
 			{Title: "Time", Width: 10},
 			{Title: "IP", Width: 18},
@@ -102,17 +107,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 	case tea.KeyMsg:
-...
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "b":
-			// Logic to block selected IP could go here
 			if len(m.logs) > 0 {
 				selected := m.table.SelectedRow()
 				m.lastAlert = fmt.Sprintf("Blocking IP: %s (Simulated)", selected[1])
 			}
 		}
+
 	case logMsg:
 		m.logs = append(m.logs, proxy.LogEntry(msg))
 		if len(m.logs) > 100 {
