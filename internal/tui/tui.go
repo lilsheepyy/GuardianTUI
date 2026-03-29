@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -25,22 +26,28 @@ var (
 	
 	okStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("10"))
+
+	searchStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("86")).
+			Bold(true)
 )
 
 type model struct {
-	table     table.Model
-	logs      []proxy.LogEntry
-	logChan   chan proxy.LogEntry
-	width     int
-	height    int
-	lastAlert string
+	table       table.Model
+	logs        []proxy.LogEntry
+	logChan     chan proxy.LogEntry
+	width       int
+	height      int
+	lastAlert   string
+	searching   bool
+	searchInput textinput.Model
 }
 
 func NewModel(logChan chan proxy.LogEntry) model {
 	columns := []table.Column{
+		{Title: "ID", Width: 8},
 		{Title: "Time", Width: 10},
 		{Title: "IP", Width: 16},
-		{Title: "Method", Width: 7},
 		{Title: "Status", Width: 35},
 		{Title: "Path", Width: 30},
 	}
@@ -63,10 +70,16 @@ func NewModel(logChan chan proxy.LogEntry) model {
 		Bold(false)
 	t.SetStyles(s)
 
+	ti := textinput.New()
+	ti.Placeholder = "Search by ID, IP, Attack..."
+	ti.CharLimit = 50
+	ti.Width = 30
+
 	return model{
-		table:   t,
-		logChan: logChan,
-		logs:    make([]proxy.LogEntry, 0),
+		table:       t,
+		logChan:     logChan,
+		logs:        make([]proxy.LogEntry, 0),
+		searchInput: ti,
 	}
 }
 
@@ -88,86 +101,124 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-
-		m.table.SetHeight(m.height - 12)
-
+		m.table.SetHeight(m.height - 13)
 		totalWidth := m.width - 6
-		if totalWidth < 100 {
-			totalWidth = 100
-		}
-		
 		m.table.SetColumns([]table.Column{
+			{Title: "ID", Width: 8},
 			{Title: "Time", Width: 10},
 			{Title: "IP", Width: 16},
-			{Title: "Method", Width: 7},
 			{Title: "Status", Width: 35},
-			{Title: "Path", Width: totalWidth - 10 - 16 - 7 - 35 - 6},
+			{Title: "Path", Width: totalWidth - 8 - 10 - 16 - 35 - 6},
 		})
 
 	case tea.KeyMsg:
+		if m.searching {
+			switch msg.String() {
+			case "enter", "esc":
+				m.searching = false
+				m.searchInput.Blur()
+				m.updateTable()
+				return m, nil
+			}
+			var tiCmd tea.Cmd
+			m.searchInput, tiCmd = m.searchInput.Update(msg)
+			m.updateTable()
+			return m, tiCmd
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "b":
-			if len(m.logs) > 0 {
-				selected := m.table.SelectedRow()
-				m.lastAlert = fmt.Sprintf("Blocking IP: %s (Simulated)", selected[1])
-			}
+		case "/":
+			m.searching = true
+			m.searchInput.Focus()
+			return m, nil
+		case "esc":
+			m.searchInput.SetValue("")
+			m.updateTable()
+			return m, nil
 		}
 
 	case logMsg:
 		m.logs = append(m.logs, proxy.LogEntry(msg))
-		if len(m.logs) > 100 {
+		if len(m.logs) > 500 {
 			m.logs = m.logs[1:]
 		}
-		
-		rows := make([]table.Row, len(m.logs))
-		for i, entry := range m.logs {
-			status := "OK"
-			if entry.Alert != nil {
-				status = fmt.Sprintf("!! %s !!", entry.Alert.Type)
-				m.lastAlert = fmt.Sprintf("[%s] %s attempted %s on %s", 
-					entry.Timestamp.Format("15:04:05"), 
-					entry.RemoteIP, 
-					entry.Alert.Type, 
-					entry.Path)
-			}
-			if entry.Blocked {
-				status = "BLOCKED"
-			}
-			
-			rows[i] = table.Row{
-				entry.Timestamp.Format("15:04:05"),
-				entry.RemoteIP,
-				entry.Method,
-				status,
-				entry.Path,
-			}
-		}
-		m.table.SetRows(rows)
-		m.table.GotoBottom()
+		m.updateTable()
 		return m, waitForActivity(m.logChan)
 	}
 	m.table, cmd = m.table.Update(msg)
 	return m, cmd
 }
 
+func (m *model) updateTable() {
+	query := strings.ToLower(m.searchInput.Value())
+	rows := make([]table.Row, 0)
+
+	for _, entry := range m.logs {
+		status := "OK"
+		if entry.Alert != nil {
+			status = fmt.Sprintf("!! %s !!", entry.Alert.Type)
+			m.lastAlert = fmt.Sprintf("[%s] %s attempted %s on %s (ID: %s)", 
+				entry.Timestamp.Format("15:04:05"), 
+				entry.RemoteIP, 
+				entry.Alert.Type, 
+				entry.Path,
+				entry.ID)
+		}
+		if entry.Blocked {
+			status = "BLOCKED"
+		}
+
+		// Filter logic
+		match := query == "" || 
+				 strings.Contains(strings.ToLower(entry.ID), query) || 
+				 strings.Contains(strings.ToLower(entry.RemoteIP), query) || 
+				 strings.Contains(strings.ToLower(status), query) || 
+				 strings.Contains(strings.ToLower(entry.Path), query)
+
+		if match {
+			rows = append(rows, table.Row{
+				entry.ID,
+				entry.Timestamp.Format("15:04:05"),
+				entry.RemoteIP,
+				status,
+				entry.Path,
+			})
+		}
+	}
+	m.table.SetRows(rows)
+	if query == "" {
+		m.table.GotoBottom()
+	}
+}
+
 func (m model) View() string {
 	var s strings.Builder
 	
-	s.WriteString(headerStyle.Render("🛡️ GUARDIAN TUI - Real-time L7 IPS Engine"))
+	s.WriteString(headerStyle.Render("🛡️ GUARDIAN TUI - Real-time IPS & Block Engine"))
 	s.WriteString("\n\n")
+	
+	if m.searching {
+		s.WriteString(searchStyle.Render("SEARCH: ") + m.searchInput.View())
+	} else if m.searchInput.Value() != "" {
+		s.WriteString(searchStyle.Render("FILTER ACTIVE: ") + m.searchInput.Value() + " (press esc to clear)")
+	} else {
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("Press / to search incident ID, IP or Attack type..."))
+	}
+	s.WriteString("\n")
+	
 	s.WriteString(baseStyle.Render(m.table.View()))
 	s.WriteString("\n\n")
 	
 	if m.lastAlert != "" {
-		s.WriteString(alertStyle.Render("LAST ALERT: " + m.lastAlert))
+		s.WriteString(alertStyle.Render("LATEST BLOCK: " + m.lastAlert))
 	} else {
 		s.WriteString(okStyle.Render("SYSTEM STATUS: MONITORING - NO THREATS DETECTED"))
 	}
 	
 	s.WriteString("\n\n")
-	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("q: quit | b: block selected ip | use arrows to scroll"))
+	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("q: quit | /: search | esc: clear search | arrows: scroll"))
 	
 	return s.String()
 }
