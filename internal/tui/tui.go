@@ -41,8 +41,8 @@ func NewModel(logChan chan proxy.LogEntry) model {
 		{Title: "Time", Width: 10},
 		{Title: "IP", Width: 16},
 		{Title: "Method", Width: 7},
-		{Title: "Status", Width: 22},
-		{Title: "Path", Width: 40},
+		{Title: "Status", Width: 35},
+		{Title: "Path", Width: 30},
 	}
 
 	t := table.New(
@@ -92,16 +92,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table.SetHeight(m.height - 12)
 
 		totalWidth := m.width - 6
-		if totalWidth < 80 {
-			totalWidth = 80
+		if totalWidth < 100 {
+			totalWidth = 100
 		}
 		
 		m.table.SetColumns([]table.Column{
 			{Title: "Time", Width: 10},
 			{Title: "IP", Width: 16},
 			{Title: "Method", Width: 7},
-			{Title: "Status", Width: 22},
-			{Title: "Path", Width: totalWidth - 10 - 16 - 7 - 22 - 6},
+			{Title: "Status", Width: 35},
+			{Title: "Path", Width: totalWidth - 10 - 16 - 7 - 35 - 6},
 		})
 
 	case tea.KeyMsg:

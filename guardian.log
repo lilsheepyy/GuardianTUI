@@ -6,3 +6,5 @@
   ↳ [DETECTION] Type:Cookie Threat: SQL Injection | Pattern:(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#)
 [2026-03-29 04:21:36] ID:5f44194e IP:[::1]:38722 GET / | Status:ALERT:Cookie Threat: SQL Injection | Agent:curl/8.5.0
   ↳ [DETECTION] Type:Cookie Threat: SQL Injection | Pattern:(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#)
+[2026-03-29 04:23:03] ID:8bc51fb8 IP:[::1]:51494 GET / | Status:ALERT:Cookie Threat: SQL Injection | Agent:curl/8.5.0
+  ↳ [DETECTION] Type:Cookie Threat: SQL Injection | Pattern:(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#)
