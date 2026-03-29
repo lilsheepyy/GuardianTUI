@@ -4,65 +4,57 @@
 [![License: MIT](https://img.shields.io/badge/Licencia-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go 1.21+](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org/dl/)
 
-**GuardianTUI** es un Sistema de Prevención de Intrusiones (IPS) de grado carrier, de código abierto y **Proxy Inverso L7** diseñado para ofrecer velocidad extrema, seguridad y visibilidad total. Impulsado por un **Motor Sharded Thread-Safe** en Go, protege tus aplicaciones contra amenazas modernas mientras proporciona una interfaz de terminal (**TUI**) espectacular en tiempo real.
+**GuardianTUI** es un Sistema de Prevención de Intrusiones (IPS) de grado profesional, diseñado como un **Proxy Inverso L7** de alto rendimiento. Protege tus aplicaciones web contra ataques sofisticados y técnicas de evasión mediante un **Motor de Normalización Recursiva** y un sistema de **Bloqueo Activo** en tiempo real.
 
 ---
 
-## 🚀 ¿Por qué GuardianTUI?
+## 🚀 Capacidades Destacadas
 
-- **🛡️ Firewall L7 Activo**: Inspección Profunda de Paquetes (DPI) para bloquear SQLi, XSS, RCE y más.
-- **🍪 Inspección de Cookies**: Escanea cada valor de cookie en busca de cargas maliciosas ocultas.
-- **📊 Dashboard TUI en Vivo**: Monitoriza cada petición y amenaza según ocurre, directamente en tu terminal.
-- **⚡ Arquitectura Sharded**: Utiliza 64 shards concurrentes para eliminar la contención de bloqueos (lock contention), garantizando una latencia ultra baja bajo carga pesada.
-- **🔍 Logs Forenses**: Informes de incidentes detallados con IDs únicos, cabeceras completas y muestras de payload.
-
----
-
-## ✨ Capacidades de Detección Avanzada
-
-GuardianTUI identifica y mitiga una amplia gama de amenazas:
-
-### 1. OWASP Top 10 y Ataques de Carga (Payload)
-- **Inyección SQL (SQLi)**: Detecta inyecciones clásicas, ciegas (blind) y basadas en evasión.
-- **Cross-Site Scripting (XSS)**: Identifica etiquetas de script, gestores de eventos y protocolos falsos `javascript:`.
-- **Ejecución Remota de Código (RCE)**: Bloquea inyecciones de comandos (`system`, `exec`, `shell_exec`, etc.).
-- **Path Traversal / LFI / RFI**: Evita el acceso a archivos sensibles del sistema como `/etc/passwd`.
-
-### 2. Huella de Bots y Escáneres (40+ Firmas)
-- **Escáneres de Seguridad**: Acunetix, Nessus, Qualys, Netsparker, OpenVAS, Arachni.
-- **Herramientas de Pentest**: nmap, sqlmap, nuclei, nikto, ffuf, gobuster, dirsearch, feroxbuster.
-- **Bots Agresivos**: Shodan, Censys, MJ12bot, AhrefsBot, SemrushBot.
-- **Cabeceras Técnicas**: Detecta herramientas mediante cabeceras específicas como `X-Scanner`, `X-Bug-Bounty` y `X-Scan-ID`.
-
-### 3. Protección de Estado (Stateful)
-- **Anti-DoS / Fuerza Bruta**: Rastrea tasas de peticiones por IP usando un rastreador sharded de alto rendimiento.
-- **Escudo de Datos Sensibles**: Bloquea intentos de acceder a `.env`, `.git`, credenciales de AWS y archivos de configuración de WordPress.
+- **🛡️ Bloqueo Activo (Active IPS)**: Intercepta y bloquea ataques instantáneamente, sirviendo una página de bloqueo HTML con un **Incident ID** único para auditoría.
+- **🔄 Motor de Normalización Recursiva**: Descapa hasta 3 niveles de codificación para detectar ataques ocultos en **Base64, URL Encoding (Doble), HTML Entities y Hex**.
+- **🔍 Escaneo Exhaustivo 360°**: Analiza meticulosamente cada rincón de la petición:
+    - **Headers**: Tanto nombres de cabecera como sus valores.
+    - **Cookies**: Desglose y validación de cada par clave-valor.
+    - **URL**: Ruta decodificada y Query Strings (parámetros `?id=...`).
+    - **Body**: Inspección profunda del cuerpo del mensaje hasta 1MB.
+- **📊 Dashboard TUI Avanzado**: Interfaz de terminal con búsqueda y filtrado en tiempo real por ID, IP o tipo de ataque.
+- **⚡ Arquitectura Sharded**: Motor thread-safe con 64 shards para una latencia ultra baja sin contención de bloqueos.
+- **🛡️ Soporte de Whitelist**: Exclusión de IPs individuales y rangos **CIDR** (ej. `10.0.0.0/8`) para tráfico de confianza.
 
 ---
 
-## 🛠️ Instalación y Inicio Rápido
+## ✨ Inteligencia de Detección
 
-### Compilar desde el código fuente
+### 1. OWASP Top 10 y Ataques Modernos
+- **SQL Injection (SQLi)**: Detección avanzada incluyendo bypasses como `' OR TRUE--` y `admin' #`.
+- **Cross-Site Scripting (XSS)**: Bloqueo de etiquetas, eventos JS y payloads modernos como `<svg/onload=`.
+- **RCE / Command Injection**: Detecta ejecución de comandos con evasiones como `${IFS}` y pipes.
+- **SSTI (Server-Side Template Injection)**: Protección para Jinja2, Twig, Mako (`{{7*7}}`, `${...}`).
+- **NoSQL Injection**: Bloqueo de operadores de MongoDB maliciosos (`$gt`, `$regex`, `$where`).
+- **Path Traversal / LFI**: Evita el acceso a `/etc/passwd`, `.env` y archivos sensibles.
+
+### 2. Detección de Comportamiento (Anti-Bot)
+- **Vulnerability Probing (Diverse)**: Identifica IPs que prueban múltiples tipos de vulnerabilidades en corto tiempo.
+- **Probing Spam**: Detecta ráfagas de ataques automatizados incluso si son variados.
+- **Scanner Detection**: Bloquea por firma a herramientas como `sqlmap`, `nmap`, `nuclei`, `burp`, etc.
+
+---
+
+## 🛠️ Inicio Rápido
+
+### Compilar e Iniciar
 ```bash
-git clone https://github.com/lilsheepyy/GuardianTUI.git
-cd GuardianTUI
 go build -o guardiantui main.go
+./guardiantui -listen :8080 -target https://tu-sitio-web.com
 ```
 
-### Protege tu API / Web
+### Probar la Protección
 ```bash
-./guardiantui -listen :9090 -target http://localhost:8080
-```
+# Prueba de SQLi (Codificado)
+curl -G --data-urlencode "id=' OR 1=1" http://localhost:8080/
 
----
-
-## 📝 Registro Forense (Listo para Sysadmins)
-
-Informes detallados en `guardian.log`, ideales para auditorías o integración con Fail2Ban:
-```log
-[2026-03-29 16:45:10] ID:a1b2c3d4 IP:1.2.3.4 POST /api/v1/upload | Status:ALERT:Command Injection | Agent:curl/8.1.2
-  ↳ [DETECTION] Type:Command Injection | Pattern:(?i)(exec|system|shell_exec|eval)
-  ↳ [PAYLOAD] {"file": "test.txt", "cmd": "rm -rf /; id"}
+# Prueba de Evasión Base64 (Payload: ' or '1'='1)
+curl http://localhost:8080/ -H "X-Attack: J29yIDEnPScx"
 ```
 
 ---
@@ -72,13 +64,19 @@ Informes detallados en `guardian.log`, ideales para auditorías o integración c
 | Tecla | Acción |
 | :--- | :--- |
 | `q` / `Ctrl+C` | Salir de GuardianTUI |
-| `b` | **Bloquear** la dirección IP seleccionada instantáneamente |
+| `/` | **Modo Búsqueda**: Filtra logs por ID, IP, Ruta o Ataque |
+| `Esc` | Limpiar filtro o cancelar búsqueda |
 | `↑` / `↓` | Desplazarse por el historial de peticiones |
 
 ---
 
-## 🏷️ Etiquetas y SEO
-#Ciberseguridad #Golang #IDS #IPS #Networking #OpenSource #DevSecOps #InfoSec #L7Firewall #TUI #ProxyInverso #OWASP #DeteccionDeAmenazas #SeguridadInformatica #AntiBot #WAF
+## 📝 Registro Forense
+
+Logs detallados en `guardian.log` con contexto de detección:
+```log
+[2026-03-29 23:51:43] ID:b6e91bc4 IP:[::1]:47820 GET / | Status:BLOCKED | Agent:curl/8.5.0
+  ↳ [DETECTION] Type:Bot: Malicious Scanner | Pattern:curl
+```
 
 ---
 
