@@ -81,11 +81,28 @@ func waitForActivity(c chan proxy.LogEntry) tea.Cmd {
 		return logMsg(<-c)
 	}
 }
-
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
+		// Adjust table height dynamically (leave space for header/footer)
+		m.table.SetHeight(m.height - 12)
+
+		// Proportional column resizing
+		totalWidth := m.width - 10
+		m.table.SetColumns([]table.Column{
+			{Title: "Time", Width: 10},
+			{Title: "IP", Width: 18},
+			{Title: "Method", Width: 8},
+			{Title: "Path", Width: totalWidth - 10 - 18 - 8 - 20},
+			{Title: "Status", Width: 20},
+		})
+
 	case tea.KeyMsg:
+...
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
