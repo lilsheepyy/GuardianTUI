@@ -150,3 +150,19 @@
 [2026-03-30 00:25:07] ID:01cc5f84 IP:::1 GET / | Status:BLOCKED | Agent:curl/8.5.0
 [2026-03-30 00:25:07] ID:3db63672 IP:::1 GET / | Status:BLOCKED | Agent:curl/8.5.0
 [2026-03-30 00:25:08] ID:bf88ac10 IP:::1 GET / | Status:BLOCKED | Agent:curl/8.5.0
+[2026-03-30 00:31:27] ID:bb024e3d IP:::1 GET / | Status:BLOCKED | Agent:curl/8.5.0
+[2026-03-30 00:31:28] ID:6b54acd0 IP:::1 GET / | Status:BLOCKED | Agent:curl/8.5.0
+[2026-03-30 00:33:33] ID:791af613 IP:176.65.139.27 GET /login | Status:BLOCKED | Agent:Go-http-client/1.1
+[2026-03-30 01:01:37] ID:f770a569 IP:66.132.172.132 GET / | Status:OK | Agent:
+[2026-03-30 01:01:42] ID:9d1f4652 IP:66.132.172.132 GET / | Status:BLOCKED | Agent:Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)
+[2026-03-30 01:01:42] ID:e364b826 IP:66.132.172.132 PRI * | Status:OK | Agent:
+[2026-03-30 01:01:50] ID:b39df7e6 IP:66.132.172.132 GET /login | Status:BLOCKED | Agent:Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)
+[2026-03-30 01:06:50] ID:b8034431 IP:45.156.129.42 GET / | Status:OK | Agent:Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.86 Safari/537.36
+[2026-03-30 01:31:23] ID:210ea19c IP:185.208.158.91 GET /login | Status:BLOCKED | Agent:Go-http-client/1.1
+[2026-03-30 01:37:33] ID:966c8932 IP:204.76.203.206 GET / | Status:OK | Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.85 Safari/537.36 Edg/90.0.818.46
+[2026-03-30 01:52:21] ID:7411a165 IP:149.86.227.60 GET / | Status:OK | Agent:Mozilla/5.0
+[2026-03-30 02:43:40] ID:10a1decd IP:5.61.209.107 GET /SDK/webLanguage | Status:OK | Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.85 Safari/537.36 Edg/90.0.818.46
+[2026-03-30 02:48:49] ID:4d02a257 IP:165.232.129.254 CONNECT / | Status:BLOCKED | Agent:Mozilla/5.0 zgrab/0.x
+[2026-03-30 02:52:42] ID:39941130 IP:204.76.203.206 GET / | Status:OK | Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.85 Safari/537.36 Edg/90.0.818.46
+[2026-03-30 02:52:59] ID:2d109331 IP:34.55.151.70 GET /cgi-bin/luci/;stok=/locale | Status:OK | Agent:
+[2026-03-30 03:07:45] ID:5dbb99bc IP:45.76.181.67 GET /login | Status:BLOCKED | Agent:Go-http-client/1.1
