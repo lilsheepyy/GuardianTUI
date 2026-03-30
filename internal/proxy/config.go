@@ -20,9 +20,11 @@ type EngineConfig struct {
 }
 
 type Config struct {
-	Whitelist    []string     `yaml:"whitelist"`
-	AIProtection AIConfig     `yaml:"ai_protection"`
-	Engine       EngineConfig `yaml:"engine"`
+	Whitelist         []string     `yaml:"whitelist"`
+	BlockedUserAgents []string     `yaml:"blocked_user_agents"`
+	BlocklistPath     string       `yaml:"blocklist_path"`
+	AIProtection      AIConfig     `yaml:"ai_protection"`
+	Engine            EngineConfig `yaml:"engine"`
 }
 
 func LoadConfig(path string) (*Config, error) {

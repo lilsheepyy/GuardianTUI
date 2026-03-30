@@ -72,6 +72,11 @@ func main() {
 
 	if cfg != nil {
 		for _, ip := range cfg.Whitelist { engine.AddWhitelist(ip) }
+		if cfg.BlocklistPath != "" {
+			if err := engine.LoadBlocklist(cfg.BlocklistPath); err != nil {
+				fmt.Printf("Warning: Could not load blocklist from %s: %v\n", cfg.BlocklistPath, err)
+			}
+		}
 	}
 	if *whitelistFlag != "" {
 		ips := strings.Split(*whitelistFlag, ",")

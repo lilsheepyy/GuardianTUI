@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -61,13 +62,14 @@ type LogEntry struct {
 }
 
 type Engine struct {
-	TargetURL  *url.URL
-	Proxy      *httputil.ReverseProxy
-	BlockedIPs sync.Map
-	Whitelist  []*net.IPNet
-	LogChan    chan LogEntry
-	Config     *Config
-	mu         sync.RWMutex
+	TargetURL      *url.URL
+	Proxy          *httputil.ReverseProxy
+	BlockedIPs     sync.Map
+	BlockedSubnets []*net.IPNet
+	Whitelist      []*net.IPNet
+	LogChan        chan LogEntry
+	Config         *Config
+	mu             sync.RWMutex
 }
 
 func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, error) {
@@ -111,6 +113,44 @@ func (e *Engine) AddWhitelist(cidr string) error {
 	return nil
 }
 
+func (e *Engine) AddBlockedSubnet(cidr string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !strings.Contains(cidr, "/") {
+		if net.ParseIP(cidr).To4() != nil { cidr = cidr + "/32" } else { cidr = cidr + "/128" }
+	}
+	_, subnet, err := net.ParseCIDR(cidr)
+	if err != nil { return err }
+	e.BlockedSubnets = append(e.BlockedSubnets, subnet)
+	return nil
+}
+
+func (e *Engine) IsIPBlockedBySubnet(ipStr string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	ip := net.ParseIP(ipStr)
+	if ip == nil { return false }
+	for _, subnet := range e.BlockedSubnets {
+		if subnet.Contains(ip) { return true }
+	}
+	return false
+}
+
+func (e *Engine) LoadBlocklist(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) { return nil }
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") { continue }
+		e.AddBlockedSubnet(line)
+	}
+	return nil
+}
+
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil { remoteIP = r.RemoteAddr }
@@ -121,8 +161,24 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check User-Agent blocklist
+	if e.Config != nil {
+		ua := r.UserAgent()
+		for _, blockedUA := range e.Config.BlockedUserAgents {
+			if strings.Contains(ua, blockedUA) {
+				e.serveBlockPage(w, incidentID, remoteIP, r, &scanner.Detection{Type: "Blocked User-Agent", Pattern: blockedUA, Level: scanner.LevelCritical}, false)
+				return
+			}
+		}
+	}
+
+	// Check IP blocklist (manual blocks and subnets)
 	if _, blocked := e.BlockedIPs.Load(remoteIP); blocked {
 		e.serveBlockPage(w, incidentID, remoteIP, r, nil, true)
+		return
+	}
+	if e.IsIPBlockedBySubnet(remoteIP) {
+		e.serveBlockPage(w, incidentID, remoteIP, r, &scanner.Detection{Type: "IP Blocklist", Level: scanner.LevelCritical}, false)
 		return
 	}
 

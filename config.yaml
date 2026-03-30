@@ -37,3 +37,12 @@ ai_protection:
 whitelist:
   - "127.0.0.1"
   - "::1"
+
+# List of User-Agent substrings to block
+blocked_user_agents:
+  - "CensysInspect"
+  - "Go-http-client"
+  - "zgrab"
+
+# Path to a file containing IPs or CIDR ranges to block (one per line)
+blocklist_path: "blocklist.txt"
