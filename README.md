@@ -114,13 +114,13 @@ blocked_user_agents:
 ```
 
 ### 🚫 IP Blocklists
-Maintain a dynamic list of bad actors through local files or remote URLs:
+Maintain a dynamic list of bad actors through local files or remote URLs. **GuardianTUI automatically refreshes these lists every 1 minute.**
 
 ```yaml
 # Path to an external file with IPs/CIDRs to block (one per line)
 blocklist_path: "blocklist.txt"
 
-# List of remote blocklist URLs to fetch on startup
+# List of remote blocklist URLs to fetch on startup and every minute
 remote_blocklists:
   - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/sslproxies_7d.ipset"
   - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/firehol_proxies.netset"
@@ -128,14 +128,9 @@ remote_blocklists:
   - "https://raw.githubusercontent.com/borestad/blocklist-abuseipdb/main/abuseipdb-s100-1d.ipv4"
 ```
 
-- **Format**: One IP or CIDR per line.
-- **Example**:
-  ```text
-  1.2.3.4
-  192.168.1.0/24
-  # This is a comment
-  45.76.181.67
-  ```
+- **Format**: Supports standard IP lists and CIDRs.
+- **Sanitization**: Automatically strips comments (`#`, `;`) and extra fields (e.g., Spamhaus descriptions).
+- **Auto-Update**: Runs in the background every 60 seconds to ensure fresh threat intelligence.
 
 ---
 

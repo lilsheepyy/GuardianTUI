@@ -83,6 +83,9 @@ func main() {
 			}
 		}
 	}
+
+	engine.StartAutoUpdate()
+
 	if *whitelistFlag != "" {
 		ips := strings.Split(*whitelistFlag, ",")
 		for _, ip := range ips { engine.AddWhitelist(strings.TrimSpace(ip)) }

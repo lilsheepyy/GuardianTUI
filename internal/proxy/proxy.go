@@ -136,6 +136,66 @@ func (e *Engine) IsIPBlockedBySubnet(ipStr string) bool {
 	return false
 }
 
+func (e *Engine) StartAutoUpdate() {
+	ticker := time.NewTicker(1 * time.Minute)
+	go func() {
+		for range ticker.C {
+			e.UpdateBlocklists()
+		}
+	}()
+}
+
+func (e *Engine) UpdateBlocklists() {
+	var newSubnets []*net.IPNet
+
+	// Load local blocklist
+	if e.Config.BlocklistPath != "" {
+		data, err := os.ReadFile(e.Config.BlocklistPath)
+		if err == nil {
+			newSubnets = append(newSubnets, e.parseData(string(data))...)
+		}
+	}
+
+	// Load remote blocklists
+	client := &http.Client{Timeout: 15 * time.Second}
+	for _, url := range e.Config.RemoteBlocklists {
+		resp, err := client.Get(url)
+		if err != nil { continue }
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil { continue }
+		newSubnets = append(newSubnets, e.parseData(string(data))...)
+	}
+
+	e.mu.Lock()
+	e.BlockedSubnets = newSubnets
+	e.mu.Unlock()
+}
+
+func (e *Engine) parseData(data string) []*net.IPNet {
+	var subnets []*net.IPNet
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") { continue }
+		
+		parts := strings.FieldsFunc(line, func(r rune) bool {
+			return r == ';' || r == ' ' || r == '\t'
+		})
+		if len(parts) > 0 {
+			cidr := parts[0]
+			if !strings.Contains(cidr, "/") {
+				if net.ParseIP(cidr).To4() != nil { cidr = cidr + "/32" } else { cidr = cidr + "/128" }
+			}
+			_, subnet, err := net.ParseCIDR(cidr)
+			if err == nil {
+				subnets = append(subnets, subnet)
+			}
+		}
+	}
+	return subnets
+}
+
 func (e *Engine) LoadBlocklist(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -162,19 +222,10 @@ func (e *Engine) FetchRemoteBlocklist(url string) error {
 }
 
 func (e *Engine) ParseBlocklist(data string) error {
-	lines := strings.Split(data, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") { continue }
-		
-		// Handle formats like "1.2.3.4/24 ; Description" or "1.2.3.4 Description"
-		parts := strings.FieldsFunc(line, func(r rune) bool {
-			return r == ';' || r == ' ' || r == '\t'
-		})
-		if len(parts) > 0 {
-			e.AddBlockedSubnet(parts[0])
-		}
-	}
+	subnets := e.parseData(data)
+	e.mu.Lock()
+	e.BlockedSubnets = append(e.BlockedSubnets, subnets...)
+	e.mu.Unlock()
 	return nil
 }
 
