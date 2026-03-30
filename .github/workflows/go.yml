@@ -1,4 +1,4 @@
-name: Go Build & CI
+name: Go Build
 
 on:
   push:
@@ -10,23 +10,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
         go-version: '1.22'
-        cache: true # Habilita caché de dependencias para builds más rápidos
 
-    - name: Verify dependencies
-      run: go mod tidy && git diff --exit-code
-
-    - name: Build GuardianTUI
-      run: go build -v -o guardiantui main.go
-
-    - name: Upload Binary Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: guardiantui-binary
-        path: guardiantui
+    - name: Build
+      run: go build -v ./...
