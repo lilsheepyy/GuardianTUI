@@ -165,8 +165,15 @@ func (e *Engine) ParseBlocklist(data string) error {
 	lines := strings.Split(data, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") { continue }
-		e.AddBlockedSubnet(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") { continue }
+		
+		// Handle formats like "1.2.3.4/24 ; Description" or "1.2.3.4 Description"
+		parts := strings.FieldsFunc(line, func(r rune) bool {
+			return r == ';' || r == ' ' || r == '\t'
+		})
+		if len(parts) > 0 {
+			e.AddBlockedSubnet(parts[0])
+		}
 	}
 	return nil
 }

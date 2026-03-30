@@ -124,6 +124,7 @@ blocklist_path: "blocklist.txt"
 remote_blocklists:
   - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/sslproxies_7d.ipset"
   - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/firehol_proxies.netset"
+  - "https://www.spamhaus.org/drop/drop.txt"
 ```
 
 - **Format**: One IP or CIDR per line.
