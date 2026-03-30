@@ -160,18 +160,20 @@ func (e *Engine) UpdateBlocklists() {
 	}
 
 	// Load remote blocklists
-	client := &http.Client{Timeout: 15 * time.Second}
-	for i, url := range e.Config.RemoteBlocklists {
+	client := &http.Client{Timeout: 20 * time.Second}
+	for _, url := range e.Config.RemoteBlocklists {
 		resp, err := client.Get(url)
 		if err != nil { continue }
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil { continue }
 
-		// Save the list locally for persistence/audit
-		safeName := strings.ReplaceAll(strings.ReplaceAll(url, "https://", ""), "/", "_")
-		if len(safeName) > 100 { safeName = fmt.Sprintf("list_%d.txt", i) }
-		os.WriteFile(fmt.Sprintf("proxylistblock/%s", safeName), data, 0644)
+		// Short & Identifiable Filename
+		urlParts := strings.Split(strings.TrimRight(url, "/"), "/")
+		fileName := urlParts[len(urlParts)-1]
+		if !strings.Contains(fileName, ".") { fileName += ".txt" }
+		
+		os.WriteFile(fmt.Sprintf("proxylistblock/%s", fileName), data, 0644)
 
 		newSubnets = append(newSubnets, e.parseData(string(data))...)
 	}
@@ -186,13 +188,18 @@ func (e *Engine) parseData(data string) []*net.IPNet {
 	lines := strings.Split(data, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
+		// Ignore full-line comments
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") { continue }
 		
-		parts := strings.FieldsFunc(line, func(r rune) bool {
-			return r == ';' || r == ' ' || r == '\t'
-		})
-		if len(parts) > 0 {
-			cidr := parts[0]
+		// Remove inline comments (Spamhaus uses ;, others often use #)
+		if idx := strings.IndexAny(line, "#;"); idx != -1 {
+			line = line[:idx]
+		}
+		
+		// Extract the first field (IP or CIDR)
+		fields := strings.Fields(line)
+		if len(fields) > 0 {
+			cidr := strings.TrimSpace(fields[0])
 			if !strings.Contains(cidr, "/") {
 				if net.ParseIP(cidr).To4() != nil { cidr = cidr + "/32" } else { cidr = cidr + "/128" }
 			}
