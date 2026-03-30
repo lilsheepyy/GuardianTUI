@@ -114,7 +114,17 @@ blocked_user_agents:
 ```
 
 ### 🚫 IP Blocklists
-Maintain a dynamic list of bad actors in `blocklist.txt` (specified by `blocklist_path` in config).
+Maintain a dynamic list of bad actors through local files or remote URLs:
+
+```yaml
+# Path to an external file with IPs/CIDRs to block (one per line)
+blocklist_path: "blocklist.txt"
+
+# List of remote blocklist URLs to fetch on startup
+remote_blocklists:
+  - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/sslproxies_7d.ipset"
+```
+
 - **Format**: One IP or CIDR per line.
 - **Example**:
   ```text

@@ -142,7 +142,27 @@ func (e *Engine) LoadBlocklist(path string) error {
 		if os.IsNotExist(err) { return nil }
 		return err
 	}
-	lines := strings.Split(string(data), "\n")
+	return e.ParseBlocklist(string(data))
+}
+
+func (e *Engine) FetchRemoteBlocklist(url string) error {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil { return err }
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil { return err }
+
+	return e.ParseBlocklist(string(data))
+}
+
+func (e *Engine) ParseBlocklist(data string) error {
+	lines := strings.Split(data, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") { continue }

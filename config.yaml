@@ -46,3 +46,7 @@ blocked_user_agents:
 
 # Path to a file containing IPs or CIDR ranges to block (one per line)
 blocklist_path: "blocklist.txt"
+
+# List of remote blocklist URLs to fetch on startup
+remote_blocklists:
+  - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/sslproxies_7d.ipset"

@@ -77,6 +77,11 @@ func main() {
 				fmt.Printf("Warning: Could not load blocklist from %s: %v\n", cfg.BlocklistPath, err)
 			}
 		}
+		for _, rbl := range cfg.RemoteBlocklists {
+			if err := engine.FetchRemoteBlocklist(rbl); err != nil {
+				fmt.Printf("Warning: Could not fetch remote blocklist from %s: %v\n", rbl, err)
+			}
+		}
 	}
 	if *whitelistFlag != "" {
 		ips := strings.Split(*whitelistFlag, ",")
