@@ -101,13 +101,20 @@ func (e *Engine) IsWhitelisted(ipStr string) bool {
 	return false
 }
 
+func (e *Engine) parseCIDR(cidr string) (*net.IPNet, error) {
+	if !strings.Contains(cidr, "/") {
+		if ip := net.ParseIP(cidr); ip != nil {
+			if ip.To4() != nil { cidr += "/32" } else { cidr += "/128" }
+		}
+	}
+	_, subnet, err := net.ParseCIDR(cidr)
+	return subnet, err
+}
+
 func (e *Engine) AddWhitelist(cidr string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if !strings.Contains(cidr, "/") {
-		if net.ParseIP(cidr).To4() != nil { cidr = cidr + "/32" } else { cidr = cidr + "/128" }
-	}
-	_, subnet, err := net.ParseCIDR(cidr)
+	subnet, err := e.parseCIDR(cidr)
 	if err != nil { return err }
 	e.Whitelist = append(e.Whitelist, subnet)
 	return nil
@@ -116,10 +123,7 @@ func (e *Engine) AddWhitelist(cidr string) error {
 func (e *Engine) AddBlockedSubnet(cidr string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if !strings.Contains(cidr, "/") {
-		if net.ParseIP(cidr).To4() != nil { cidr = cidr + "/32" } else { cidr = cidr + "/128" }
-	}
-	_, subnet, err := net.ParseCIDR(cidr)
+	subnet, err := e.parseCIDR(cidr)
 	if err != nil { return err }
 	e.BlockedSubnets = append(e.BlockedSubnets, subnet)
 	return nil
@@ -145,41 +149,45 @@ func (e *Engine) StartAutoUpdate() {
 	}()
 }
 
-func (e *Engine) UpdateBlocklists() {
-	var newSubnets []*net.IPNet
-	
-	// Ensure directory exists
-	os.MkdirAll("proxylistblock", 0755)
-
-	// Helper to process and save a list
-	processList := func(name string, data string) {
-		sanitized := e.parseDataToStrings(data)
-		if len(sanitized) > 0 {
-			// Save the CLEAN version for the user
-			os.WriteFile(fmt.Sprintf("proxylistblock/%s", name), []byte(strings.Join(sanitized, "\n")), 0644)
-			
-			// Load into memory
-			for _, cidr := range sanitized {
-				if !strings.Contains(cidr, "/") {
-					if net.ParseIP(cidr).To4() != nil { cidr = cidr + "/32" } else { cidr = cidr + "/128" }
-				}
-				_, subnet, err := net.ParseCIDR(cidr)
-				if err == nil {
-					newSubnets = append(newSubnets, subnet)
+func (e *Engine) sanitizer(data string) (cleaned []string, subnets []*net.IPNet) {
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") { continue }
+		if idx := strings.IndexAny(line, "#;"); idx != -1 { line = line[:idx] }
+		
+		fields := strings.Fields(line)
+		if len(fields) > 0 {
+			cleanIP := strings.TrimSpace(fields[0])
+			if strings.Contains(cleanIP, ".") || strings.Contains(cleanIP, ":") {
+				if subnet, err := e.parseCIDR(cleanIP); err == nil {
+					cleaned = append(cleaned, cleanIP)
+					subnets = append(subnets, subnet)
 				}
 			}
 		}
 	}
+	return
+}
 
-	// Load local blocklist
-	if e.Config.BlocklistPath != "" {
-		data, err := os.ReadFile(e.Config.BlocklistPath)
-		if err == nil {
-			processList("local_custom.txt", string(data))
+func (e *Engine) UpdateBlocklists() {
+	var allSubnets []*net.IPNet
+	os.MkdirAll("proxylistblock", 0755)
+
+	process := func(name, data string) {
+		cleanStrings, subnets := e.sanitizer(data)
+		if len(cleanStrings) > 0 {
+			os.WriteFile(fmt.Sprintf("proxylistblock/%s", name), []byte(strings.Join(cleanStrings, "\n")), 0644)
+			allSubnets = append(allSubnets, subnets...)
 		}
 	}
 
-	// Load remote blocklists
+	if e.Config.BlocklistPath != "" {
+		if data, err := os.ReadFile(e.Config.BlocklistPath); err == nil {
+			process("local_custom.txt", string(data))
+		}
+	}
+
 	client := &http.Client{Timeout: 20 * time.Second}
 	for _, url := range e.Config.RemoteBlocklists {
 		resp, err := client.Get(url)
@@ -188,74 +196,29 @@ func (e *Engine) UpdateBlocklists() {
 		resp.Body.Close()
 		if err != nil { continue }
 
-		// Generate a short, identifiable name
 		name := "list.txt"
 		lowURL := strings.ToLower(url)
 		if strings.Contains(lowURL, "spamhaus") { name = "spamhaus_drop.txt" } else if strings.Contains(lowURL, "abuseipdb") { name = "abuseipdb.txt" } else if strings.Contains(lowURL, "sslproxies") { name = "sslproxies.txt" } else if strings.Contains(lowURL, "firehol_proxies") { name = "firehol_proxies.txt" } else {
-			urlParts := strings.Split(strings.TrimRight(url, "/"), "/")
-			name = urlParts[len(urlParts)-1]
+			parts := strings.Split(strings.TrimRight(url, "/"), "/")
+			name = parts[len(parts)-1]
 			if !strings.Contains(name, ".") { name += ".txt" }
 		}
-
-		processList(name, string(data))
+		process(name, string(data))
 	}
 
 	e.mu.Lock()
-	e.BlockedSubnets = newSubnets
+	e.BlockedSubnets = allSubnets
 	e.mu.Unlock()
-}
-
-func (e *Engine) parseDataToStrings(data string) []string {
-	var result []string
-	lines := strings.Split(data, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		
-		// 1. Ignore full-line comments (Spamhaus uses ;, others use #)
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
-			continue
-		}
-		
-		// 2. Remove inline comments (e.g., "1.2.3.4 ; SBL123" or "1.2.3.4 # comment")
-		if idx := strings.IndexAny(line, "#;"); idx != -1 {
-			line = line[:idx]
-		}
-		
-		// 3. Extract the first field (IP or CIDR)
-		fields := strings.Fields(line)
-		if len(fields) > 0 {
-			cleanIP := strings.TrimSpace(fields[0])
-			// Basic validation: must at least look like an IP or CIDR (contain dots or colons)
-			if strings.Contains(cleanIP, ".") || strings.Contains(cleanIP, ":") {
-				result = append(result, cleanIP)
-			}
-		}
-	}
-	return result
-}
-
-func (e *Engine) parseData(data string) []*net.IPNet {
-	var subnets []*net.IPNet
-	sanitized := e.parseDataToStrings(data)
-	for _, cidr := range sanitized {
-		if !strings.Contains(cidr, "/") {
-			if net.ParseIP(cidr).To4() != nil { cidr = cidr + "/32" } else { cidr = cidr + "/128" }
-		}
-		_, subnet, err := net.ParseCIDR(cidr)
-		if err == nil {
-			subnets = append(subnets, subnet)
-		}
-	}
-	return subnets
 }
 
 func (e *Engine) LoadBlocklist(path string) error {
 	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) { return nil }
-		return err
-	}
-	return e.ParseBlocklist(string(data))
+	if err != nil { return err }
+	_, subnets := e.sanitizer(string(data))
+	e.mu.Lock()
+	e.BlockedSubnets = append(e.BlockedSubnets, subnets...)
+	e.mu.Unlock()
+	return nil
 }
 
 func (e *Engine) FetchRemoteBlocklist(url string) error {
@@ -263,19 +226,17 @@ func (e *Engine) FetchRemoteBlocklist(url string) error {
 	resp, err := client.Get(url)
 	if err != nil { return err }
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
 	data, err := io.ReadAll(resp.Body)
 	if err != nil { return err }
-
-	return e.ParseBlocklist(string(data))
+	_, subnets := e.sanitizer(string(data))
+	e.mu.Lock()
+	e.BlockedSubnets = append(e.BlockedSubnets, subnets...)
+	e.mu.Unlock()
+	return nil
 }
 
 func (e *Engine) ParseBlocklist(data string) error {
-	subnets := e.parseData(data)
+	_, subnets := e.sanitizer(data)
 	e.mu.Lock()
 	e.BlockedSubnets = append(e.BlockedSubnets, subnets...)
 	e.mu.Unlock()
