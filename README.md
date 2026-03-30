@@ -1,129 +1,175 @@
-# 🛡️ GuardianTUI: High-Performance L7 IPS & AI Shield
+# 🛡️ GuardianTUI User Manual & Documentation
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/lilsheepyy/GuardianTUI)](https://goreportcard.com/report/github.com/lilsheepyy/GuardianTUI)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go 1.21+](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org/dl/)
+**GuardianTUI** is an advanced **L7 Reverse Proxy & Intrusion Prevention System (IPS)** written in Go. It provides real-time threat detection, automated blocking, and a high-performance Terminal User Interface (TUI) for monitoring.
 
-**GuardianTUI** is a professional-grade **L7 Reverse Proxy & Intrusion Prevention System (IPS)** designed for the AI era. It protects web applications and AI APIs from sophisticated attacks using a **Heuristic Scoring Engine**, **Recursive Normalization**, and a real-time **TUI Dashboard**.
+---
+
+## 📑 Table of Contents
+1. [Core Architecture](#-core-architecture)
+2. [Installation & Building](#-installation--building)
+3. [Quick Start](#-quick-start)
+4. [Configuration Guide](#-configuration-guide)
+    - [YAML Security Engine](#-yaml-security-engine)
+    - [Custom AI Heuristics](#-custom-ai-heuristics)
+5. [Network Defense](#-network-defense)
+    - [User-Agent Blocking](#-user-agent-blocking)
+    - [IP Blocklists](#-ip-blocklists)
+6. [Operational Modes](#-operational-modes)
+7. [TUI Dashboard Guide](#-tui-dashboard-guide)
+8. [Forensics & Logs](#-forensics--logs)
+
+---
+
+## 🏛️ Core Architecture
+
+GuardianTUI operates as a transparent layer between the internet and your application.
+
+- **Recursive Normalization**: Decodes up to 3 layers of obfuscation (Base64, Hex, Double URL Encoding, HTML Entities) before analysis.
+- **Heuristic Scoring Engine**: Calculates a "Threat Score" for incoming requests, specifically optimized for LLM/AI prompts.
+- **Sharded Probing Detection**: Uses high-performance memory sharding to track "Probing Bots" that test multiple vulnerabilities over time.
+- **Active Mitigation**: Automatically serves a 403 Forbidden page with a unique Incident ID to blocked attackers.
+
+---
+
+## 🔨 Installation & Building
+
+### Prerequisites
+- **Go 1.21** or higher.
+- Linux/macOS/Windows (TUI optimized for Unix-like terminals).
+
+### Build from Source
+```bash
+git clone https://github.com/lilsheepyy/GuardianTUI.git
+cd GuardianTUI
+go build -o guardiantui main.go
+```
 
 ---
 
 ## 🚀 Quick Start
 
-### Build
-```bash
-go build -o guardiantui main.go
-```
-
-### Basic Run
-Proxy traffic from port 8080 to your local app on port 3000:
+Protect a local application running on port 3000:
 ```bash
 ./guardiantui -target http://localhost:3000
 ```
+Access your app through `http://localhost:8080` (default proxy port).
 
 ---
 
-## 🛠️ Command Line Interface
+## ⚙️ Configuration Guide
 
-| Flag | Description | Default |
-| :--- | :--- | :--- |
-| `-target` | The backend URL you want to protect | `http://localhost:80` |
-| `-listen` | Address and port to listen on | `:8080` |
-| `-config` | Path to the YAML security configuration | `config.yaml` |
-| `-ai-rules` | Path to the custom AI detection rules (JSON) | `ai.json` |
-| `-log` | Path to the persistent attack log file | `guardian.log` |
-| `-whitelist` | Comma-separated IPs/CIDRs to bypass checks | `""` |
-| `-https` | Enable local HTTPS with self-signed certs | `false` |
-| `-domain` | Enable Production SSL via Let's Encrypt (ACME) | `""` |
+### 📄 YAML Security Engine (`config.yaml`)
+The main configuration file controls the intensity of the security engine.
 
-### Usage Examples
-
-**1. Production Mode (Auto SSL):**
-Automatically provision and renew certificates for your domain:
-```bash
-sudo ./guardiantui -target http://localhost:3000 -domain example.com
-```
-
-**2. Local Secure Proxy (Self-signed):**
-Test HTTPS locally on a specific port:
-```bash
-./guardiantui -target http://localhost:3000 -listen :443 -https
-```
-
-**3. Specific Whitelisting:**
-Allow your internal network or a specific IP to bypass the security engine:
-```bash
-./guardiantui -target http://localhost:3000 -whitelist 192.168.1.0/24,10.0.0.5
-```
-
-**4. Custom Security Policies:**
-Run with a specific configuration for a staging environment:
-```bash
-./guardiantui -config staging-config.yaml -ai-rules staging-ai.json
-```
-
----
-
-## 🤖 Exclusive: AI Shield (Anti-AI Abuse)
-
-### Advanced AI Protection
-Define your AI endpoints in `config.yaml`:
 ```yaml
+engine:
+  max_scan_size_bytes: 1048576       # Scan up to 1MB of payload
+  probing_window_seconds: 60         # Time window to track suspicious IPs
+  probing_threshold_unique: 3        # Block if 3+ unique attack types detected
+  spam_threshold_total: 5            # Block if 5+ attacks of any type detected
+
 ai_protection:
-  endpoints: ["/v1/chat"]
-  score_threshold: 5
+  endpoints: ["/v1/chat", "/api"]    # Endpoints requiring AI heuristics
+  score_threshold: 5                 # Stricter if lower (default 5)
+  protect_pii: true                  # Block Credit Cards/SSNs in prompts
+  blocked_keywords:                  # Instant block for these words
+    - "internal_key"
+    - "admin_password"
+
+whitelist:
+  - "127.0.0.1"                      # Your own IP to avoid self-blocking
 ```
+
+### 🧠 Custom AI Heuristics (`ai.json`)
+Define your own weights for specific prompt patterns.
+
+```json
+[
+  {
+    "pattern": "(?i)reveal your secret key",
+    "weight": 5,
+    "description": "Custom Secret Key Leakage"
+  },
+  {
+    "pattern": "(?i)ignore instructions",
+    "weight": 3,
+    "description": "Override Attempt"
+  }
+]
+```
+If the cumulative weight of matched patterns reaches the `score_threshold`, the request is blocked.
 
 ---
 
 ## 🛡️ Network Defense
 
-### User-Agent & IP Blocklists
-Manage threat actors efficiently through `config.yaml`:
-
+### 🕵️ User-Agent Blocking
+Block automated scanners by their signature in `config.yaml`:
 ```yaml
-# List of User-Agent substrings to block automatically
 blocked_user_agents:
   - "CensysInspect"
+  - "Go-http-client"
   - "zgrab"
-
-# Path to an external file with IPs/CIDRs to block (one per line)
-blocklist_path: "blocklist.txt"
+  - "sqlmap"
 ```
 
-The `blocklist.txt` file supports single IPs and CIDR ranges:
-```text
-# Block list example
-185.93.89.43
-192.168.100.0/24
+### 🚫 IP Blocklists
+Maintain a dynamic list of bad actors in `blocklist.txt` (specified by `blocklist_path` in config).
+- **Format**: One IP or CIDR per line.
+- **Example**:
+  ```text
+  1.2.3.4
+  192.168.1.0/24
+  # This is a comment
+  45.76.181.67
+  ```
+
+---
+
+## 🌐 Operational Modes
+
+### 1. Production Mode (HTTPS via Let's Encrypt)
+GuardianTUI can automatically manage SSL certificates.
+```bash
+sudo ./guardiantui -target http://localhost:3000 -domain example.com
+```
+
+### 2. Local Secure Mode (Self-signed)
+Useful for testing HTTPS features locally.
+```bash
+./guardiantui -target http://localhost:3000 -https -listen :443
+```
+
+### 3. Custom Ports & Logging
+```bash
+./guardiantui -target http://localhost:3000 -listen :9000 -log security.log
 ```
 
 ---
 
-## ⌨️ TUI Shortcuts
+## 📊 TUI Dashboard Guide
 
-| Key | Action |
-| :--- | :--- |
-| `q` / `Ctrl+C` | Quit |
-| `/` | **Search Mode**: Filter logs by ID, IP, or Attack Type |
-| `Esc` | Clear filter or exit search |
-| `↑` / `↓` | Scroll through request history |
+The Terminal interface is your live mission control:
+
+- **Live Log Feed**: Shows real-time requests. Red entries indicate blocked threats.
+- **Traffic Stats**: Breakdown of allowed vs. blocked traffic.
+- **Threat Chart**: Visualizes attack frequency over time.
+- **Search Mode (`/`)**: Type any string (IP, ID, or Type) to filter logs instantly.
+- **Navigation**: Use arrow keys to scroll through the history of captured attacks.
 
 ---
 
 ## 📝 Forensics & Logs
-Detailed reports in `guardian.log` with unique incident IDs for easy auditing:
+
+Every block event is recorded in `guardian.log` with a structured format:
+
 ```log
-[2026-03-29 23:51:43] ID:b6e91bc4 IP:1.2.3.4 POST /v1/chat | Status:BLOCKED:AI Abuse | Agent:python-requests/2.31
-  ↳ [DETECTION] Type:AI Abuse: High Suspect Score (7) | Patterns: Instruction Override, Persona Hijack
+[2026-03-31 14:20:05] ID:e6b8a1 ID IP:1.2.3.4 POST /v1/chat | Status:BLOCKED:AI Abuse | Agent:Mozilla/5.0...
 ```
 
----
-
-## 🏷️ SEO & Metadata
-#Cybersecurity #WAF #IPS #LLMSecurity #PromptInjection #JailbreakDefense #Golang #APIProtection #InfoSec #OpenSource #DevSecOps #AIGovernance #TerminalUI
+The **Incident ID** shown in the log matches the ID displayed to the user on the block page, allowing you to quickly find the exact request that triggered a block when a user reports a false positive.
 
 ---
 
 ## 📜 License
-Distributed under the **MIT License**.
+Distributed under the **MIT License**. Created by **sheep**.
