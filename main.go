@@ -72,18 +72,10 @@ func main() {
 
 	if cfg != nil {
 		for _, ip := range cfg.Whitelist { engine.AddWhitelist(ip) }
-		if cfg.BlocklistPath != "" {
-			if err := engine.LoadBlocklist(cfg.BlocklistPath); err != nil {
-				fmt.Printf("Warning: Could not load blocklist from %s: %v\n", cfg.BlocklistPath, err)
-			}
-		}
-		for _, rbl := range cfg.RemoteBlocklists {
-			if err := engine.FetchRemoteBlocklist(rbl); err != nil {
-				fmt.Printf("Warning: Could not fetch remote blocklist from %s: %v\n", rbl, err)
-			}
-		}
 	}
 
+	// Initial update before starting the ticker
+	engine.UpdateBlocklists()
 	engine.StartAutoUpdate()
 
 	if *whitelistFlag != "" {

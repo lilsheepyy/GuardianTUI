@@ -177,18 +177,21 @@ func (e *Engine) UpdateBlocklists() {
 	process := func(name, data string) {
 		cleanStrings, subnets := e.sanitizer(data)
 		if len(cleanStrings) > 0 {
+			// Save the CLEAN, SANITIZED version
 			os.WriteFile(fmt.Sprintf("proxylistblock/%s", name), []byte(strings.Join(cleanStrings, "\n")), 0644)
 			allSubnets = append(allSubnets, subnets...)
 		}
 	}
 
+	// 1. Process local blocklist
 	if e.Config.BlocklistPath != "" {
 		if data, err := os.ReadFile(e.Config.BlocklistPath); err == nil {
 			process("local_custom.txt", string(data))
 		}
 	}
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	// 2. Process remote blocklists
+	client := &http.Client{Timeout: 30 * time.Second}
 	for _, url := range e.Config.RemoteBlocklists {
 		resp, err := client.Get(url)
 		if err != nil { continue }
@@ -206,6 +209,7 @@ func (e *Engine) UpdateBlocklists() {
 		process(name, string(data))
 	}
 
+	// 3. Atomically swap the active subnets
 	e.mu.Lock()
 	e.BlockedSubnets = allSubnets
 	e.mu.Unlock()
