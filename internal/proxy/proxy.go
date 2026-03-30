@@ -147,6 +147,9 @@ func (e *Engine) StartAutoUpdate() {
 
 func (e *Engine) UpdateBlocklists() {
 	var newSubnets []*net.IPNet
+	
+	// Ensure directory exists
+	os.MkdirAll("proxylistblock", 0755)
 
 	// Load local blocklist
 	if e.Config.BlocklistPath != "" {
@@ -158,12 +161,18 @@ func (e *Engine) UpdateBlocklists() {
 
 	// Load remote blocklists
 	client := &http.Client{Timeout: 15 * time.Second}
-	for _, url := range e.Config.RemoteBlocklists {
+	for i, url := range e.Config.RemoteBlocklists {
 		resp, err := client.Get(url)
 		if err != nil { continue }
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil { continue }
+
+		// Save the list locally for persistence/audit
+		safeName := strings.ReplaceAll(strings.ReplaceAll(url, "https://", ""), "/", "_")
+		if len(safeName) > 100 { safeName = fmt.Sprintf("list_%d.txt", i) }
+		os.WriteFile(fmt.Sprintf("proxylistblock/%s", safeName), data, 0644)
+
 		newSubnets = append(newSubnets, e.parseData(string(data))...)
 	}
 
