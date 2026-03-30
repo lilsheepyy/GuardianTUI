@@ -52,3 +52,4 @@ remote_blocklists:
   - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/sslproxies_7d.ipset"
   - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/firehol_proxies.netset"
   - "https://www.spamhaus.org/drop/drop.txt"
+  - "https://raw.githubusercontent.com/borestad/blocklist-abuseipdb/main/abuseipdb-s100-1d.ipv4"
