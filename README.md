@@ -114,13 +114,19 @@ blocked_user_agents:
 ```
 
 ### 🚫 IP Blocklists
-Maintain a dynamic list of bad actors through local files or remote URLs. **GuardianTUI automatically refreshes these lists every 1 minute.**
+Manage high-threat actors through local files or remote URLs. **GuardianTUI automatically refreshes these lists every 1 minute** and performs an immediate update upon startup.
+
+#### Active Threat Feeds (Configured by Default):
+- **🔥 FireHOL Proxies**: Comprehensive aggregate of open proxies detected in the last 30 days.
+- **🛡️ Spamhaus DROP**: "Do Not Route Or Peer" list containing hijacked or malicious network blocks.
+- **🛑 AbuseIPDB**: Highly reported IPs with 100% confidence level for recent malicious activity.
+- **🔐 SSL Proxies**: A frequently updated feed of active open SSL proxies used for anonymization.
 
 ```yaml
 # Path to an external file with IPs/CIDRs to block (one per line)
 blocklist_path: "blocklist.txt"
 
-# List of remote blocklist URLs to fetch on startup and every minute
+# Remote blocklist URLs (Refreshed every 60 seconds)
 remote_blocklists:
   - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/sslproxies_7d.ipset"
   - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/firehol_proxies.netset"
@@ -128,9 +134,11 @@ remote_blocklists:
   - "https://raw.githubusercontent.com/borestad/blocklist-abuseipdb/main/abuseipdb-s100-1d.ipv4"
 ```
 
-- **Format**: Supports standard IP lists and CIDRs.
-- **Sanitization**: Automatically strips comments (`#`, `;`) and extra fields (e.g., Spamhaus descriptions).
-- **Auto-Update**: Runs in the background every 60 seconds to ensure fresh threat intelligence.
+#### Local Cache & Sanitization
+GuardianTUI maintains a **Local Persistent Cache** in the `proxylistblock/` folder:
+- **Automatic Sanitization**: All lists are stripped of headers, comments (`;` or `#`), and metadata descriptions.
+- **Clean Storage**: Files like `spamhaus_drop.txt` and `abuseipdb.txt` are stored as pure IP/CIDR lists for easy audit.
+- **No Latency**: The engine performs a full update in the background every minute without interrupting active traffic filtering.
 
 ---
 
