@@ -132,9 +132,6 @@ func Scan(params ScanParams) *Detection {
 		}
 		return d
 	}
-	
-	// Add keyword scanning fallback for AI requests since it was handled in proxy before.
-	// Wait, keyword scanning is handled in the proxy currently. We keep it there.
 
 	return nil
 }
