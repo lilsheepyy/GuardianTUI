@@ -23,17 +23,17 @@ type AIHeuristic struct {
 var baseAIHeuristics = []AIHeuristic{
 	// --- ZERO TOLERANCE: AI CSAM SHIELD ---
 	// Improved patterns to detect combinations regardless of order
-	{Weight: 5, Pattern: `(?i)(generate|create|write|describe|imagine).*((child|minor|underage|kiddie|pedo).* (porn|nude|sex|naked|erotica)|(porn|nude|sex|naked|erotica).*(child|minor|underage|kiddie|pedo|kid))`, Description: "AI: CSAM Generation Attempt"},
-	{Weight: 5, Pattern: `(?i)(roleplay|act as|pretend).*((child|minor|underage|kiddie|pedo).* (porn|nude|sex|naked|erotica)|(porn|nude|sex|naked|erotica).*(child|minor|underage|kiddie|pedo|kid))`, Description: "AI: CSAM Roleplay Attempt"},
-	{Weight: 4, Pattern: `(?i)(bypassing|ignoring|overriding).*(safety|filter|restriction).*(child|minor|csam|kid)`, Description: "AI: Safety Bypass for Illicit Content"},
+	{Weight: 5, Pattern: `(?i)(generate|create|write|describe|imagine|story|fiction|rp|roleplay).*((child|minor|underage|kiddie|pedo|infant|toddler|pre-?teen|kid|loli|shota|son|daughter).* (porn|nude|sex|naked|erotica|bedroom|bathroom|shower|nakedness|unclothed|exposed)|(porn|nude|sex|naked|erotica|bedroom|bathroom|shower|nakedness|unclothed|exposed).*(child|minor|underage|kiddie|pedo|infant|toddler|pre-?teen|kid|loli|shota|son|daughter))`, Description: "AI: CSAM Generation Attempt"},
+	{Weight: 5, Pattern: `(?i)(roleplay|act as|pretend|rp|mimic).*((child|minor|underage|kiddie|pedo|infant|toddler|pre-?teen|kid|loli|shota).* (porn|nude|sex|naked|erotica|sensual|intimate)|(porn|nude|sex|naked|erotica|sensual|intimate).*(child|minor|underage|kiddie|pedo|infant|toddler|pre-?teen|kid|loli|shota))`, Description: "AI: CSAM Roleplay Attempt"},
+	{Weight: 4, Pattern: `(?i)(bypassing|ignoring|overriding|disabling|turning off).*(safety|filter|restriction|guardrail|blocker).*(child|minor|csam|kid|loli|underage)`, Description: "AI: Safety Bypass for Illicit Content"},
 
 	// --- Standard AI Safety ---
-	{Weight: 3, Pattern: `(?i)(ignore|disregard|forget|bypass|overrule|reset|stop).*(instruction|direction|guideline|prompt)`, Description: "Instruction Override"},
-	{Weight: 2, Pattern: `(?i)(act as|you are now|imagine you are|pretend to be|roleplay as|start speaking as)`, Description: "Roleplay/Persona Hijack"},
-	{Weight: 4, Pattern: `(?i)(developer mode|dan mode|jailbreak|unfiltered|without restrictions|no constraints)`, Description: "Jailbreak Signature"},
-	{Weight: 2, Pattern: `(?i)(system prompt|initial instructions|hidden context|reveal your internal)`, Description: "Prompt Leakage Attempt"},
-	{Weight: 3, Pattern: `(?i)(translate the following and then execute|now in reverse|encode this and)`, Description: "Obfuscation/Translation Bypass"},
-	{Weight: 2, Pattern: `(?i)(Assistant:|System:|User:|Human:|### Instruction:)`, Description: "Structural Hijacking"},
+	{Weight: 3, Pattern: `(?i)(ignore|disregard|forget|bypass|overrule|reset|stop|suspend).*(instruction|direction|guideline|prompt|rule|policy|restriction|filter)`, Description: "Instruction Override"},
+	{Weight: 2, Pattern: `(?i)(act as|you are now|imagine you are|pretend to be|roleplay as|start speaking as|behave like|assume the persona of)`, Description: "Roleplay/Persona Hijack"},
+	{Weight: 4, Pattern: `(?i)(developer mode|dan mode|jailbreak|unfiltered|without restrictions|no constraints|anarchy|unbound|unshackled)`, Description: "Jailbreak Signature"},
+	{Weight: 2, Pattern: `(?i)(system prompt|initial instructions|hidden context|reveal your internal|original instructions|base prompt|creation parameters)`, Description: "Prompt Leakage Attempt"},
+	{Weight: 3, Pattern: `(?i)(translate the following and then execute|now in reverse|encode this and|in base64|in rot13|cipher|leetspeak)`, Description: "Obfuscation/Translation Bypass"},
+	{Weight: 2, Pattern: `(?i)(Assistant:|System:|User:|Human:|### Instruction:|AI:|Prompt:|Context:)`, Description: "Structural Hijacking"},
 }
 
 var customAIHeuristics []AIHeuristic

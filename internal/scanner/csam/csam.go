@@ -18,15 +18,15 @@ type CSAMHeuristic struct {
 
 var csamHeuristics = []CSAMHeuristic{
 	// Level 5: Direct & Critical (Instant Block)
-	{Weight: 5, Pattern: `(?i)\b(child[ _-]?(porn|pornography|sex|abuse|rape|pornografy))\b`, Description: "Direct CSAM Terminology"},
-	{Weight: 5, Pattern: `(?i)\b(cp|csam|kiddie|pedo|pedophile|pedofilia|pedofilo|lolita|jailbait|cub)\b`, Description: "Illicit Slang/Acronyms"},
-	{Weight: 5, Pattern: `(?i)\b(pre-?teen|underage|minor|child).*(porn|sex|nude|naked)\b`, Description: "Illicit Combinations"},
+	{Weight: 5, Pattern: `(?i)\b(child[ _-]?(porn|pornography|sex|abuse|rape|pornografy|molest|molestation|prod))\b`, Description: "Direct CSAM Terminology"},
+	{Weight: 5, Pattern: `(?i)\b(cp|csam|kiddie|pedo|pedophile|pedofilia|pedofilo|lolita|jailbait|cub|pre-?teen|underage|minor|infant|toddler|loli|shota|shotalo|loli-?con|pedobear)\b`, Description: "Illicit Slang/Acronyms"},
+	{Weight: 5, Pattern: `(?i)\b(pre-?teen|underage|minor|child|kid).*(porn|sex|nude|naked|action|video|image|photo|collection|pack|link|mega|drive|folder|archive|rar|zip|zip-?line)\b`, Description: "Illicit Combinations"},
 	
 	// Level 2-3: Suspicious Context (Requires combination to block)
-	{Weight: 3, Pattern: `(?i)\b(young|little|small|tiny).*(girl|boy|child|kid).*(nude|naked|action)\b`, Description: "Suspicious Context: Age + Content"},
-	{Weight: 2, Pattern: `(?i)\b(links|mega|drive|folder|pack|collection).*(cp|csam|kiddie)\b`, Description: "Distribution Attempt"},
-	{Weight: 3, Pattern: `(?i)\b(barely|legal|teen|school).*(girl|boy)\b`, Description: "Borderline/High-Risk Content"},
-	{Weight: 2, Pattern: `(?i)\b(trade|exchange|buy|sell|request).*(cp|csam)\b`, Description: "Solicitation Indicators"},
+	{Weight: 3, Pattern: `(?i)\b(young|little|small|tiny|cute|pretty|sweet).*(girl|boy|child|kid|infant|toddler|daughter|son).*(nude|naked|action|bedroom|bathroom|shower|pool|diaper|undies|underwear)\b`, Description: "Suspicious Context: Age + Content"},
+	{Weight: 2, Pattern: `(?i)\b(links|mega|drive|folder|pack|collection|stash|vault|cloud|box|pastebin|telegraph|anonfiles).*(cp|csam|kiddie|loli|shota)\b`, Description: "Distribution Attempt"},
+	{Weight: 3, Pattern: `(?i)\b(barely|legal|teen|school|middle[ -]?school|high[ -]?school|college).*(girl|boy|student|uniform|skirt|locker[ -]?room)\b`, Description: "Borderline/High-Risk Content"},
+	{Weight: 2, Pattern: `(?i)\b(trade|exchange|buy|sell|request|leak|shared|dm|pm|discord|telegram|session|wickr).*(cp|csam|loli|shota)\b`, Description: "Solicitation Indicators"},
 }
 
 var leetspeakReplacer *strings.Replacer
