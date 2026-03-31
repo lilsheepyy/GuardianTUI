@@ -40,6 +40,18 @@ var rawPatterns = []models.Detection{
 
 	// --- Nmap Scripting Engine (NSE) & Scanning ---
 	{Pattern: `(?i)(nmap-nse|NSE/|nmap\.org|http-google-safe-browsing|http-slowloris-check|http-sql-injection|http-vuln-|http-robtex-|http-favicon|http-open-proxy|http-form-brute|http-enum|http-headers|http-brute|http-auth|http-methods|http-shellshock)`, Level: models.LevelHigh, Type: "Nmap Scanning Payload"},
+
+	// --- Nuclei & Template Scanning ---
+	{Pattern: `(?i)(X-Nuclei-Template|nuclei\.projectdiscovery\.io|interactsh\.com|oast\.pro|oast\.live|oast\.site|oast\.online|oast\.fun|oast\.me)`, Level: models.LevelHigh, Type: "Nuclei Scanner Payload"},
+
+	// --- Burp Suite & Collaborator ---
+	{Pattern: `(?i)(burpcollaborator\.net|burpsuite|burp-collaborator|CollaboratorClient)`, Level: models.LevelHigh, Type: "Burp Suite Payload"},
+
+	// --- BeEF (Browser Exploitation Framework) ---
+	{Pattern: `(?i)(hook\.js|beef_hook|beef\.session|/beef/|/ui/panel/|/ui/media/)`, Level: models.LevelCritical, Type: "BeEF Framework Detected"},
+
+	// --- Log4j / JNDI / OGNL (RCE) ---
+	{Pattern: `(?i)(\$\{jndi:(?:ldap|ldaps|rmi|dns|nis|iiop|corba|nds|http):|%24%7bjndi:|ctx\.lookup\(|java\.lang\.Runtime|java\.lang\.ProcessBuilder|java\.lang\.System\.getProperty|ognl\.OgnlContext|#context\["com\.opensymphony\.xwork2\.dispatcher\.HttpServletRequest"\])`, Level: models.LevelCritical, Type: "JNDI / Log4j / RCE Injection"},
 }
 
 var compiledPatterns []CompiledDetection
