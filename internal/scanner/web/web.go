@@ -37,12 +37,16 @@ var rawPatterns = []models.Detection{
 	
 	{Pattern: `(?i)(\$gt|\$ne|\$in|\$where|\$regex|\$expr|\$exists|\$and|\$or|\$not)`, Level: models.LevelHigh, Type: "NoSQL Injection"},
 	{Pattern: `(?i)({{\s*.*?\s*}}|\${\s*.*?\s*}|<%\s*.*?\s*%>|{{7\*7}}|{{config\.items\(\)}})`, Level: models.LevelHigh, Type: "SSTI Attempt"},
+
+	// --- Nmap Scripting Engine (NSE) & Scanning ---
+	{Pattern: `(?i)(nmap-nse|NSE/|nmap\.org|http-google-safe-browsing|http-slowloris-check|http-sql-injection|http-vuln-|http-robtex-|http-favicon|http-open-proxy|http-form-brute|http-enum|http-headers|http-brute|http-auth|http-methods|http-shellshock)`, Level: models.LevelHigh, Type: "Nmap Scanning Payload"},
 }
 
 var compiledPatterns []CompiledDetection
 
 var maliciousAgents = []string{
 	"sqlmap", "nmap", "nikto", "dirbuster", "masscan", "zgrab", "nuclei", "burpsuite",
+	"nmap scripting engine", "nmap-nse", "nmap.org", "nmap-scripting-engine", "nse-http",
 	"acunetix", "nessus", "qualys", "openvas", "netsparker", "arachni", "w3af", "havij",
 	"gobuster", "wfuzz", "ffuf", "dirsearch", "feroxbuster", "rustbuster", "dirb",
 	"amass", "subfinder", "httpx", "dnsx", "gau", "waybackpack", "hakrawler",
