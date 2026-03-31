@@ -428,12 +428,13 @@ func (e *Engine) SendHeartbeat() {
 		return
 	}
 	
-	// Real-time anonymous pulse. Uses the POWr Hit Counter ID provided.
-	// This request increments the hit counter on POWr.io.
-	url := "https://www.powr.io/plugins/hit-counter/view.json?unique_label=50070496_1774989469"
+	// Real-time anonymous pulse via CounterAPI.dev
+	// This request increments the active instance counter.
+	url := "https://api.counterapi.dev/v2/sheeps-team-3543/guardiantui/up"
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
 	if err == nil {
+		req.Header.Set("Authorization", "Bearer ut_aTIPkcxdEveuOq6u5oV6hLnEYD3tG6T47sbHQWDk")
 		req.Header.Set("User-Agent", "GuardianTUI-Heartbeat")
 		res, err := client.Do(req)
 		if err == nil { res.Body.Close() }
