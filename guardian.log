@@ -191,3 +191,15 @@
 [2026-03-31 03:54:13] ID:60691e9c IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
 [2026-03-31 03:54:13] ID:d123510e IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
 [2026-03-31 03:54:13] ID:91530345 IP:::1 GET / | Status:BLOCKED | Agent:zgrab/0.x
+[2026-03-31 04:17:15] ID:d0b377aa IP:::1 GET / | Status:OK | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:c292ac13 IP:::1 GET /search | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:a7d8e3a5 IP:::1 GET /<script>alert(1)</script> | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:11edc075 IP:::1 GET /etc/passwd | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:eebf1fa6 IP:::1 POST / | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:f40234da IP:::1 POST / | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:386e3368 IP:::1 POST / | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:85d57564 IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:53adce43 IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:886912ce IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 04:17:15] ID:c6cc1417 IP:::1 GET / | Status:BLOCKED | Agent:zgrab/0.x
+[2026-03-31 04:17:15] ID:08303ae4 IP:::1 GET / | Status:BLOCKED | Agent:Mozilla/5.0
