@@ -428,10 +428,9 @@ func (e *Engine) SendHeartbeat() {
 		return
 	}
 	
-	// Real-time anonymous pulse. Uses the GitHub repo URL as a unique key.
-	// This service increments a counter every time it's requested.
-	// You can see the result live on your README.
-	url := "https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https://github.com/lilsheepyy/GuardianTUI/active-instances&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=active+instances&edge_flat=false"
+	// Real-time anonymous pulse. Uses the POWr Hit Counter ID provided.
+	// This request increments the hit counter on POWr.io.
+	url := "https://www.powr.io/plugins/hit-counter/view.json?unique_label=50070496_1774989469"
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
 	if err == nil {

@@ -50,7 +50,7 @@ GuardianTUI identifies its traffic to both the client and the backend server usi
 To help improve the engine and track global adoption, GuardianTUI includes an **entirely anonymous** telemetry system.
 
 - **Privacy First**: No IP addresses, User-Agents, or identifying metadata are ever sent.
-- **How it Works**: A simple `GET` request is sent to a raw asset in the official GitHub repository. GitHub's internal traffic analytics count this as a "Unique Visitor."
+- **How it Works**: A simple `GET` request is made to an anonymous hit counter service (POWr.io).
 - **Opt-in Only**: On the first run, the CLI will prompt you to enable or disable this feature. Your choice is saved in `config.yaml`.
 - **Frequency**: A single "pulse" is sent every 24 hours while the engine is active.
 
