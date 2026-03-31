@@ -1,5 +1,7 @@
 # 🛡️ GuardianTUI User Manual & Documentation
 
+![Active Instances](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https://github.com/lilsheepyy/GuardianTUI/active-instances&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=Active+Instances&edge_flat=false)
+
 **GuardianTUI** is an advanced **L7 Reverse Proxy & Intrusion Prevention System (IPS)** written in Go. It provides real-time threat detection, automated blocking, and a high-performance Terminal User Interface (TUI) for monitoring.
 
 ---

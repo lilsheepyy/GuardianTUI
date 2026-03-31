@@ -428,10 +428,10 @@ func (e *Engine) SendHeartbeat() {
 		return
 	}
 	
-	// Send anonymous pulse to GitHub
-	// This hits a raw asset in your repository. GitHub Insights will count it as a "Unique Visitor"
-	// but will NEVER show you who it is.
-	url := "https://raw.githubusercontent.com/guardian-tui/guardiantui/main/assets/pulse.png"
+	// Real-time anonymous pulse. Uses the GitHub repo URL as a unique key.
+	// This service increments a counter every time it's requested.
+	// You can see the result live on your README.
+	url := "https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https://github.com/lilsheepyy/GuardianTUI/active-instances&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=active+instances&edge_flat=false"
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
 	if err == nil {
