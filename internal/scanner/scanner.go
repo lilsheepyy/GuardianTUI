@@ -31,7 +31,6 @@ type Detection struct {
 
 // Base patterns for traditional web attacks
 var patterns = []Detection{
-	{Pattern: `(?i)\b(cp|child porn|child pornography|csam|kiddie|pedo|pedophile|lolita|jailbait|cub)\b`, Level: LevelCritical, Type: "Anti-CSAM Shield / Illicit Content"},
 	{Pattern: `(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#|' OR 'x'='x|"\s+or\s+"x"="x|admin'\s+--|admin'\s+#|' OR TRUE--|"\s+OR\s+TRUE--)`, Level: LevelCritical, Type: "SQL Injection"},
 	{Pattern: `(?i)(<script.*?>|javascript:|alert\s*\(|onerror\s*=|onclick\s*=|onload\s*=|document\.cookie|<img\s+src=.*onerror=|<svg/onload=)`, Level: LevelHigh, Type: "XSS Attempt"},
 	{Pattern: `(?i)(\.\.\/|\.\.\\|/etc/passwd|/windows/win\.ini|/proc/self/environ|file://|php://filter|expect://|zip://|data://)`, Level: LevelCritical, Type: "Path Traversal / LFI"},
@@ -51,6 +50,65 @@ var maliciousAgents = []string{
 }
 
 var scannerHeaders = []string{"X-Scanner", "X-Scanning-IP", "X-Scan-Type", "X-Bug-Bounty", "X-Scan-ID"}
+
+// --- ANTI-CSAM SHIELD: ZERO TOLERANCE HEURISTICS ---
+
+type CSAMHeuristic struct {
+	Weight      int
+	Pattern     string
+	Description string
+}
+
+var csamHeuristics = []CSAMHeuristic{
+	// Level 5: Direct & Critical (Instant Block)
+	{5, `(?i)\b(child[ _-]?(porn|pornography|sex|abuse|rape|pornografy))\b`, "Direct CSAM Terminology"},
+	{5, `(?i)\b(cp|csam|kiddie|pedo|pedophile|pedofilia|pedofilo|lolita|jailbait|cub)\b`, "Illicit Slang/Acronyms"},
+	{5, `(?i)\b(pre-?teen|underage|minor|child).*(porn|sex|nude|naked)\b`, "Illicit Combinations"},
+	
+	// Level 2-3: Suspicious Context (Requires combination to block)
+	{3, `(?i)\b(young|little|small|tiny).*(girl|boy|child|kid).*(nude|naked|action)\b`, "Suspicious Context: Age + Content"},
+	{2, `(?i)\b(links|mega|drive|folder|pack|collection).*(cp|csam|kiddie)\b`, "Distribution Attempt"},
+	{3, `(?i)\b(barely|legal|teen|school).*(girl|boy)\b`, "Borderline/High-Risk Content"},
+	{2, `(?i)\b(trade|exchange|buy|sell|request).*(cp|csam)\b`, "Solicitation Indicators"},
+}
+
+func analyzeCSAM(input string) *Detection {
+	score := 0
+	matched := []string{}
+	
+	// Normalize for leetspeak/obfuscation
+	leetspeak := strings.NewReplacer(
+		"@", "a", "4", "a", "3", "e", "1", "i", "!", "i", "0", "o", "7", "t", "5", "s", "$", "s",
+	)
+	normalizedInput := leetspeak.Replace(strings.ToLower(input))
+
+	for _, h := range csamHeuristics {
+		re := regexp.MustCompile(h.Pattern)
+		if re.MatchString(normalizedInput) {
+			score += h.Weight
+			matched = append(matched, h.Description)
+			
+			// If we hit a critical weight (5+), return immediately
+			if h.Weight >= 5 {
+				return &Detection{
+					Pattern: h.Pattern,
+					Level:   LevelCritical,
+					Type:    "ZERO TOLERANCE: CSAM Shield - " + h.Description,
+				}
+			}
+		}
+	}
+
+	// If cumulative score is high (threshold 5), block
+	if score >= 5 {
+		return &Detection{
+			Pattern: strings.Join(matched, " | "),
+			Level:   LevelCritical,
+			Type:    fmt.Sprintf("ZERO TOLERANCE: CSAM Heuristic Score (%d)", score),
+		}
+	}
+	return nil
+}
 
 // --- AI SHIELD V2: HEURISTICS ---
 
@@ -160,6 +218,13 @@ type ScanParams struct {
 
 func Scan(params ScanParams) *Detection {
 	var d *Detection
+
+	// --- ZERO TOLERANCE: CSAM SHIELD ---
+	// High-priority heuristic check across all request components
+	combinedInput := normalize(params.Path + " " + params.Query + " " + params.Body)
+	if csamDet := analyzeCSAM(combinedInput); csamDet != nil {
+		return csamDet
+	}
 
 	// 1. User Agent
 	ua := normalize(params.UserAgent)
