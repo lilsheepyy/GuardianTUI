@@ -27,7 +27,30 @@ GuardianTUI operates as a transparent layer between the internet and your applic
 - **Recursive Normalization**: Decodes up to 3 layers of obfuscation (Base64, Hex, Double URL Encoding, HTML Entities) before analysis.
 - **Heuristic Scoring Engine**: Calculates a "Threat Score" for incoming requests, specifically optimized for LLM/AI prompts.
 - **Sharded Probing Detection**: Uses high-performance memory sharding to track "Probing Bots" that test multiple vulnerabilities over time.
+- **Transparent Proof of Work (PoW)**: Invisible, browser-based cryptographic challenge (Anti-DDoS) that stops bots without annoying CAPTCHAs.
 - **Active Mitigation**: Automatically serves a 403 Forbidden page with a unique Incident ID to blocked attackers.
+- **Identification & Traceability**: Injects unique headers (`X-Protected-By`, `Via`) and cookies (`guardianTUI`) for license verification and proxy identification.
+- **Anonymous Telemetry**: Opt-in "Heartbeat" system to track active installations via GitHub without collecting PII or IP addresses.
+
+---
+
+### 🆔 Identification & Traceability
+GuardianTUI identifies its traffic to both the client and the backend server using industry-standard methods:
+
+- **🍪 Identification Cookie**: Every response includes a `guardianTUI=true` cookie.
+- **🛡️ Custom Header**: The `X-Protected-By: GuardianTUI` header is added to all responses.
+- **🌐 Via Header**: Follows RFC standards by adding `Via: 1.1 guardianTUI` to track the proxy chain.
+- **📦 Backend Forwarding**: The `guardianTUI=true` cookie is also forwarded to your backend application, allowing your internal logic to verify that traffic is coming through the security layer.
+
+---
+
+### 💓 Anonymous Telemetry (Heartbeat)
+To help improve the engine and track global adoption, GuardianTUI includes an **entirely anonymous** telemetry system.
+
+- **Privacy First**: No IP addresses, User-Agents, or identifying metadata are ever sent.
+- **How it Works**: A simple `GET` request is sent to a raw asset in the official GitHub repository. GitHub's internal traffic analytics count this as a "Unique Visitor."
+- **Opt-in Only**: On the first run, the CLI will prompt you to enable or disable this feature. Your choice is saved in `config.yaml`.
+- **Frequency**: A single "pulse" is sent every 24 hours while the engine is active.
 
 ---
 
@@ -85,7 +108,7 @@ Protect a local application running on port 3000:
 ```bash
 ./guardiantui -target http://localhost:3000
 ```
-Access your app through `http://localhost:8080` (default proxy port).
+On the first run, you will be prompted to enable/disable anonymous telemetry. Access your application through `http://localhost:8080`.
 
 ---
 

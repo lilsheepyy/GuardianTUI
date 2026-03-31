@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/crypto/acme/autocert"
@@ -69,6 +70,29 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error starting engine: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Opt-in Telemetry Prompt
+	if cfg != nil && !cfg.TelemetryAsked {
+		fmt.Print("\n🛡️  Help improve GuardianTUI? (Anonymous Heartbeat to GitHub) [y/N]: ")
+		var resp string
+		fmt.Scanln(&resp)
+		resp = strings.ToLower(resp)
+		enabled := resp == "y" || resp == "yes"
+		cfg.TelemetryEnabled = &enabled
+		cfg.TelemetryAsked = true
+		cfg.Save(*configFile)
+		fmt.Println("Selection saved to config.yaml")
+	}
+
+	// Start Heartbeat if enabled
+	if cfg != nil && cfg.TelemetryEnabled != nil && *cfg.TelemetryEnabled {
+		go func() {
+			for {
+				engine.SendHeartbeat()
+				time.Sleep(24 * time.Hour)
+			}
+		}()
 	}
 
 	if cfg != nil {

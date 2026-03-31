@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"fmt"
+	"guardiantui/internal/proxy/pow"
 	"guardiantui/internal/scanner"
 	"io"
 	"net"
@@ -70,22 +71,32 @@ type Engine struct {
 	Whitelist       []*net.IPNet
 	LogChan         chan LogEntry
 	Config          *Config
+	PoW             *pow.System
 	mu              sync.RWMutex
 }
 
 func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, error) {
 	u, err := url.Parse(target)
 	if err != nil { return nil, err }
+	
+	var powSys *pow.System
+	if cfg != nil && cfg.Engine.PoWEnabled {
+		powSys = pow.NewSystem(cfg.Engine.PoWDifficulty, "")
+	}
+
 	e := &Engine{
 		TargetURL: u,
 		LogChan:   logChan,
 		Config:    cfg,
+		PoW:       powSys,
 	}
 	e.Proxy = httputil.NewSingleHostReverseProxy(u)
 	originalDirector := e.Proxy.Director
 	e.Proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		req.Host = u.Host
+		// Identification cookie for license and tracking
+		req.AddCookie(&http.Cookie{Name: "guardianTUI", Value: "true"})
 	}
 	e.Proxy.ModifyResponse = e.modifyResponse
 	return e, nil
@@ -366,6 +377,37 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Transparent PoW Challenge Handling (Only for requests that passed the security scan)
+	if e.PoW != nil && e.Config.Engine.PoWEnabled {
+		// Only challenge GET requests (to avoid breaking APIs) and only if not whitelisted
+		if r.Method == "GET" && !strings.Contains(r.Header.Get("Accept"), "application/json") {
+			powCookie, err := r.Cookie("gtui_pow")
+			powVerified := false
+			
+			if err == nil && powCookie != nil {
+				// Verify solution: challenge|nonce
+				decoded, _ := url.QueryUnescape(powCookie.Value)
+				parts := strings.SplitN(decoded, "|", 2)
+				if len(parts) == 2 {
+					if e.PoW.ValidateSolution(remoteIP, parts[0], parts[1]) {
+						powVerified = true
+					}
+				}
+			}
+			
+			if !powVerified {
+				// Send invisible JS challenge
+				challenge := e.PoW.GenerateChallenge(remoteIP)
+				html := e.PoW.JSInjector(challenge)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-store, max-age=0")
+				w.WriteHeader(http.StatusServiceUnavailable) // Using 503 to prevent indexing of challenge page
+				w.Write([]byte(html))
+				return
+			}
+		}
+	}
+
 	entry := LogEntry{
 		ID:          incidentID,
 		Timestamp:   time.Now(),
@@ -379,6 +421,24 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	e.LogChan <- entry
 	e.Proxy.ServeHTTP(w, r)
+}
+
+func (e *Engine) SendHeartbeat() {
+	if e.Config == nil || e.Config.TelemetryEnabled == nil || !*e.Config.TelemetryEnabled {
+		return
+	}
+	
+	// Send anonymous pulse to GitHub
+	// This hits a raw asset in your repository. GitHub Insights will count it as a "Unique Visitor"
+	// but will NEVER show you who it is.
+	url := "https://raw.githubusercontent.com/guardian-tui/guardiantui/main/assets/pulse.png"
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err == nil {
+		req.Header.Set("User-Agent", "GuardianTUI-Heartbeat")
+		res, err := client.Do(req)
+		if err == nil { res.Body.Close() }
+	}
 }
 
 func (e *Engine) serveBlockPage(w http.ResponseWriter, id, ip string, r *http.Request, d *scanner.Detection, alreadyBlocked bool) {
@@ -399,6 +459,22 @@ func (e *Engine) serveBlockPage(w http.ResponseWriter, id, ip string, r *http.Re
 	fmt.Fprintf(w, blockPageTmpl, id)
 }
 
-func (e *Engine) modifyResponse(res *http.Response) error { return nil }
+func (e *Engine) modifyResponse(res *http.Response) error {
+	// Identification cookie for license and identification purpose
+	cookie := &http.Cookie{
+		Name:  "guardianTUI",
+		Value: "true",
+		Path:  "/",
+	}
+	res.Header.Add("Set-Cookie", cookie.String())
+
+	// Method 1: Custom HTTP Header
+	res.Header.Set("X-Protected-By", "GuardianTUI")
+
+	// Method 5: Via Header
+	res.Header.Add("Via", "1.1 guardianTUI")
+
+	return nil
+}
 func (e *Engine) Block(ip string) { e.BlockedIPs.Store(ip, true) }
 func (e *Engine) Unblock(ip string) { e.BlockedIPs.Delete(ip) }

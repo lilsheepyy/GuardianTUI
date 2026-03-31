@@ -13,10 +13,12 @@ type AIConfig struct {
 }
 
 type EngineConfig struct {
-	MaxScanSize      int `yaml:"max_scan_size_bytes"`
-	ProbingWindow    int `yaml:"probing_window_seconds"`
-	ProbingThreshold int `yaml:"probing_threshold_unique"`
-	SpamThreshold    int `yaml:"spam_threshold_total"`
+	MaxScanSize      int  `yaml:"max_scan_size_bytes"`
+	ProbingWindow    int  `yaml:"probing_window_seconds"`
+	ProbingThreshold int  `yaml:"probing_threshold_unique"`
+	SpamThreshold    int  `yaml:"spam_threshold_total"`
+	PoWEnabled       bool `yaml:"pow_enabled"`
+	PoWDifficulty    int  `yaml:"pow_difficulty"`
 }
 
 type Config struct {
@@ -26,6 +28,16 @@ type Config struct {
 	RemoteBlocklists  []string     `yaml:"remote_blocklists"`
 	AIProtection      AIConfig     `yaml:"ai_protection"`
 	Engine            EngineConfig `yaml:"engine"`
+	
+	// Anonymous Telemetry (Heartbeat)
+	TelemetryEnabled *bool `yaml:"telemetry_enabled,omitempty"`
+	TelemetryAsked   bool  `yaml:"telemetry_asked,omitempty"`
+}
+
+func (c *Config) Save(path string) error {
+	data, err := yaml.Marshal(c)
+	if err != nil { return err }
+	return os.WriteFile(path, data, 0644)
 }
 
 func LoadConfig(path string) (*Config, error) {
