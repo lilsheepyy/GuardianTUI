@@ -119,6 +119,12 @@ type AIHeuristic struct {
 }
 
 var baseAIHeuristics = []AIHeuristic{
+	// --- ZERO TOLERANCE: AI CSAM SHIELD ---
+	{5, `(?i)(generate|create|write|describe|imagine).*(child|minor|underage|kiddie|pedo).*(porn|nude|sex|naked|erotica)`, "AI: CSAM Generation Attempt"},
+	{5, `(?i)(roleplay|act as|pretend).*(child|minor|underage|kiddie|pedo).*(porn|nude|sex|naked|erotica)`, "AI: CSAM Roleplay Attempt"},
+	{4, `(?i)(bypassing|ignoring|overriding).*(safety|filter|restriction).*(child|minor|csam)`, "AI: Safety Bypass for Illicit Content"},
+
+	// --- Standard AI Safety ---
 	{3, `(?i)(ignore|disregard|forget|bypass|overrule|reset|stop).*(previous|earlier|above).*(instructions|directions|guidelines|prompt)`, "Instruction Override"},
 	{2, `(?i)(act as|you are now|imagine you are|pretend to be|roleplay as|start speaking as)`, "Roleplay/Persona Hijack"},
 	{4, `(?i)(developer mode|dan mode|jailbreak|unfiltered|without restrictions|no constraints)`, "Jailbreak Signature"},
@@ -287,6 +293,11 @@ func Scan(params ScanParams) *Detection {
 }
 
 func analyzeAIAbuse(input string, threshold int) *Detection {
+	// 0. Double-layer CSAM Check (Critical Importance)
+	if csamDet := analyzeCSAM(input); csamDet != nil {
+		return csamDet
+	}
+
 	score := 0
 	matchedPatterns := []string{}
 	semanticInput := ""
