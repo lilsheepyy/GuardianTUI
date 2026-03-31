@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"strings"
+
 	"guardiantui/internal/scanner/ai"
 	"guardiantui/internal/scanner/bot"
 	"guardiantui/internal/scanner/csam"
@@ -51,6 +53,12 @@ func Scan(params ScanParams) *Detection {
 	if d == nil {
 		for key, values := range params.Headers {
 			normKey := utils.Normalize(key)
+			
+			// Skip the "Cookie" header as we handle cookies granularly below
+			if strings.EqualFold(normKey, "cookie") {
+				continue
+			}
+
 			if d = web.MatchPatterns(normKey, params.MaxScanSize); d != nil {
 				d.Type = "Header Key Attack: " + d.Type
 				break
@@ -69,7 +77,24 @@ func Scan(params ScanParams) *Detection {
 		}
 	}
 
-	// 4. URL (Path & Query)
+	// 4. Cookies (Granular Inspection)
+	if d == nil {
+		for name, value := range params.Cookies {
+			normName := utils.Normalize(name)
+			normVal := utils.Normalize(value)
+
+			if d = web.MatchPatterns(normName, params.MaxScanSize); d != nil {
+				d.Type = "Cookie Name Attack: " + d.Type
+				break
+			}
+			if d = web.MatchPatterns(normVal, params.MaxScanSize); d != nil {
+				d.Type = "Cookie Value Attack: " + d.Type
+				break
+			}
+		}
+	}
+
+	// 5. URL (Path & Query)
 	if d == nil {
 		if d = web.MatchPatterns(utils.Normalize(params.Path), params.MaxScanSize); d != nil {
 			d.Type = "Path Attack: " + d.Type

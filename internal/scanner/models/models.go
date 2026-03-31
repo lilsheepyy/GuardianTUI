@@ -24,6 +24,7 @@ type ScanParams struct {
 	Query     string
 	Body      string
 	Headers   map[string][]string
+	Cookies   map[string]string
 	IP        string
 	UserAgent string
 	IsAI      bool

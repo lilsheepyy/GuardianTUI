@@ -324,12 +324,19 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	decodedPath, _ := url.PathUnescape(r.URL.Path)
 	decodedQuery, _ := url.QueryUnescape(r.URL.RawQuery)
 
+	// Extract Cookies for granular scanning
+	cookieMap := make(map[string]string)
+	for _, cookie := range r.Cookies() {
+		cookieMap[cookie.Name] = cookie.Value
+	}
+
 	scanParams := scanner.ScanParams{
 		Method:    r.Method,
 		Path:      decodedPath,
 		Query:     decodedQuery,
 		Body:      bodyCaptured,
 		Headers:   r.Header,
+		Cookies:   cookieMap,
 		IP:        remoteIP,
 		UserAgent: r.UserAgent(),
 		IsAI:      isAI,
