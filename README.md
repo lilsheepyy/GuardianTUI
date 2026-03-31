@@ -37,6 +37,7 @@ GuardianTUI incorporates a specialized **Illicit Content Shield** designed to id
 - **🧠 Heuristic Scoring Engine**: Beyond simple keywords, it uses a multi-layered scoring system that analyzes combinations of terms and context.
 - **🔄 Advanced Normalization**: Bypasses attempts to hide illicit terms using leetspeak (e.g., `@` for `a`, `4` for `a`), Base64, or Hex encoding.
 - **🚨 Priority Scanning**: This check runs with **absolute priority** before any other security analysis, ensuring zero tolerance for illicit content.
+- **🤖 Integrated AI Safety**: Deep integration with the **AI Shield** to detect and block attempts to generate, describe, or roleplay illicit content via LLMs.
 - **📊 Detailed Alerts**: Incidents are flagged specifically as `ZERO TOLERANCE: CSAM Shield` in the TUI and logs for immediate forensic awareness.
 
 ---
