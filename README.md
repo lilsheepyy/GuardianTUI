@@ -46,9 +46,10 @@ GuardianTUI incorporates a specialized **Illicit Content Shield** designed to id
 Advanced protection against common exploitation frameworks and automated attack tools.
 
 - **🕵️ Meterpreter Detection**: Identifies Meterpreter HTTP/HTTPS transport patterns, including Payload UUIDs and session polling strings (`RECV`).
-- **🧮 URI Checksum Heuristics**: Implements the Metasploit 8-bit checksum algorithm to identify stagers even with randomized alphanumeric URIs.
+- **🧮 URI Checksum Heuristics**: Implements the Metasploit 8-bit checksum algorithm to identify stagers (Windows, Java, Python, PHP) even with randomized alphanumeric URIs.
 - **🐚 PowerShell Stager Defense**: Blocks common "One-Liner" download/execute stagers used by `web_delivery` and other MSF modules.
-- **🛠️ Known Exploit Mitigation**: Built-in signatures for critical vulnerabilities like **Log4j (JNDI)**, **Struts2 (OGNL)**, and Java deserialization attacks.
+- **🛠️ Generic Exploit Mitigation**: Generic signatures for critical vulnerability classes like **Log4j (JNDI)**, **Struts2 (OGNL)**, and Java deserialization attacks.
+- **📦 Modular Architecture**: Logic is isolated in a dedicated `metasploit` package for high-performance inspection.
 
 
 ---
