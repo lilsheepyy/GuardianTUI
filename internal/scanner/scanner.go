@@ -31,6 +31,7 @@ type Detection struct {
 
 // Base patterns for traditional web attacks
 var patterns = []Detection{
+	{Pattern: `(?i)\b(cp|child porn|child pornography|csam|kiddie|pedo|pedophile|lolita|jailbait|cub)\b`, Level: LevelCritical, Type: "Anti-CSAM Shield / Illicit Content"},
 	{Pattern: `(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#|' OR 'x'='x|"\s+or\s+"x"="x|admin'\s+--|admin'\s+#|' OR TRUE--|"\s+OR\s+TRUE--)`, Level: LevelCritical, Type: "SQL Injection"},
 	{Pattern: `(?i)(<script.*?>|javascript:|alert\s*\(|onerror\s*=|onclick\s*=|onload\s*=|document\.cookie|<img\s+src=.*onerror=|<svg/onload=)`, Level: LevelHigh, Type: "XSS Attempt"},
 	{Pattern: `(?i)(\.\.\/|\.\.\\|/etc/passwd|/windows/win\.ini|/proc/self/environ|file://|php://filter|expect://|zip://|data://)`, Level: LevelCritical, Type: "Path Traversal / LFI"},

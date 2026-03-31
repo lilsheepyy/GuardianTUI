@@ -35,8 +35,7 @@ ai_protection:
 
 # --- NETWORK ---
 whitelist:
-  - "127.0.0.1"
-  - "::1"
+
 
 # List of User-Agent substrings to block
 blocked_user_agents:

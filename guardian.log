@@ -170,3 +170,9 @@
 [2026-03-31 00:57:53] ID:3a2b3c28 IP:93.123.109.183 GET /judge | Status:BLOCKED | Agent:Go-http-client/1.1
 [2026-03-31 00:57:54] ID:d9bd40ef IP:93.123.109.183 GET /judge | Status:BLOCKED | Agent:Go-http-client/1.1
 [2026-03-31 00:58:40] ID:de14388e IP:192.168.1.38 GET / | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
+[2026-03-31 01:13:21] ID:79d4991c IP:::1 GET / | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 01:13:34] ID:fcea25c8 IP:::1 GET / | Status:OK | Agent:Mozilla/5.0
+[2026-03-31 01:13:48] ID:bfbacab2 IP:127.0.0.1 GET / | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
+[2026-03-31 01:14:09] ID:07b509fd IP:127.0.0.1 GET / | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
+[2026-03-31 01:15:24] ID:52b0f035 IP:127.0.0.1 GET / | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
+[2026-03-31 01:15:47] ID:6b47ac4b IP:127.0.0.1 GET / | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
