@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"guardiantui/internal/proxy/pow"
 	"guardiantui/internal/scanner"
+	"guardiantui/internal/scanner/dlp"
 	"io"
 	"net"
 	"net/http"
@@ -335,6 +336,12 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	decodedPath, _ := url.PathUnescape(r.URL.Path)
 	decodedQuery, _ := url.QueryUnescape(r.URL.RawQuery)
 
+	// --- DLP: Request Path Shield ---
+	if dlpDetection := dlp.AnalyzeRequest(decodedPath); dlpDetection != nil {
+		e.serveBlockPage(w, incidentID, remoteIP, r, dlpDetection, false)
+		return
+	}
+
 	// Extract Cookies for granular scanning
 	cookieMap := make(map[string]string)
 	for _, cookie := range r.Cookies() {
@@ -473,6 +480,39 @@ func (e *Engine) modifyResponse(res *http.Response) error {
 
 	// Method 5: Via Header
 	res.Header.Add("Via", "1.1 guardianTUI")
+
+	// --- Secret Leakage Shield (DLP) ---
+	// We only scan text-based responses to avoid corrupting binaries
+	contentType := res.Header.Get("Content-Type")
+	if strings.Contains(contentType, "text") || strings.Contains(contentType, "json") || strings.Contains(contentType, "javascript") || strings.Contains(contentType, "xml") {
+		body, err := io.ReadAll(res.Body)
+		if err == nil {
+			bodyStr := string(body)
+			if detection := dlp.AnalyzeResponse(bodyStr); detection != nil {
+				// Alert the TUI/Logs
+				e.LogChan <- LogEntry{
+					ID:        "DLP-" + uuid.New().String()[:8],
+					Timestamp: time.Now(),
+					RemoteIP:  "INTERNAL", // Leak from backend
+					Method:    "REPLY",
+					Path:      "OUTGOING",
+					Status:    res.StatusCode,
+					Blocked:   false, // We redact instead of blocking the whole response
+					Alert:     detection,
+				}
+
+				// Redact the secret in the response body
+				redactedBody := dlp.RedactSecrets(bodyStr, detection.Pattern)
+				res.Body = io.NopCloser(bytes.NewBufferString(redactedBody))
+				res.ContentLength = int64(len(redactedBody))
+				res.Header.Set("Content-Length", fmt.Sprint(len(redactedBody)))
+				res.Header.Set("X-DLP-Warning", "Sensitive data redacted")
+			} else {
+				// Restore body if no leak found
+				res.Body = io.NopCloser(bytes.NewBuffer(body))
+			}
+		}
+	}
 
 	return nil
 }
