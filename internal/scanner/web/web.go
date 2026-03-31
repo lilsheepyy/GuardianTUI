@@ -45,7 +45,7 @@ var rawPatterns = []models.Detection{
 	{Pattern: `(?i)(X-Nuclei-Template|nuclei\.projectdiscovery\.io|interactsh\.com|oast\.pro|oast\.live|oast\.site|oast\.online|oast\.fun|oast\.me)`, Level: models.LevelHigh, Type: "Nuclei Scanner Payload"},
 
 	// --- Burp Suite & Collaborator ---
-	{Pattern: `(?i)(burpcollaborator\.net|burpsuite|burp-collaborator|CollaboratorClient)`, Level: models.LevelHigh, Type: "Burp Suite Payload"},
+	{Pattern: `(?i)(burpcollaborator\.net|oastify\.com|burpsuite|burp-collaborator|CollaboratorClient|X-Burp-Scan|burp-scan)`, Level: models.LevelHigh, Type: "Burp Suite Payload"},
 
 	// --- BeEF (Browser Exploitation Framework) ---
 	{Pattern: `(?i)(hook\.js|beef_hook|beef\.session|/beef/|/ui/panel/|/ui/media/)`, Level: models.LevelCritical, Type: "BeEF Framework Detected"},
@@ -58,6 +58,7 @@ var compiledPatterns []CompiledDetection
 
 var maliciousAgents = []string{
 	"sqlmap", "nmap", "nikto", "dirbuster", "masscan", "zgrab", "nuclei", "burpsuite",
+	"burp suite", "burp-collaborator", "burp-scan", "burp-intruder", "burp-spider",
 	"nmap scripting engine", "nmap-nse", "nmap.org", "nmap-scripting-engine", "nse-http",
 	"acunetix", "nessus", "qualys", "openvas", "netsparker", "arachni", "w3af", "havij",
 	"gobuster", "wfuzz", "ffuf", "dirsearch", "feroxbuster", "rustbuster", "dirb",
