@@ -6,6 +6,7 @@ import (
 	"guardiantui/internal/scanner/ai"
 	"guardiantui/internal/scanner/bot"
 	"guardiantui/internal/scanner/csam"
+	"guardiantui/internal/scanner/metasploit"
 	"guardiantui/internal/scanner/models"
 	"guardiantui/internal/scanner/pii"
 	"guardiantui/internal/scanner/utils"
@@ -36,12 +37,25 @@ func Scan(params ScanParams) *Detection {
 
 	// 1. ZERO TOLERANCE: CSAM SHIELD
 	// High-priority heuristic check across all request components
-	combinedInput := utils.Normalize(params.Path + " " + params.Query + " " + params.Body)
+	var parts []string
+	if params.Path != "" { parts = append(parts, params.Path) }
+	if params.Query != "" { parts = append(parts, params.Query) }
+	if params.Body != "" { parts = append(parts, params.Body) }
+	combinedInput := utils.Normalize(strings.Join(parts, " "))
+	
 	if csamDet := csam.AnalyzeCSAM(combinedInput); csamDet != nil {
 		return csamDet
 	}
 
-	// 2. User Agent
+	// 2. Metasploit/Exploit Shield
+	if d = metasploit.CheckChecksum(params.Path); d != nil {
+		return d
+	}
+	if d = metasploit.AnalyzeMSF(combinedInput); d != nil {
+		return d
+	}
+
+	// 3. User Agent
 	ua := utils.Normalize(params.UserAgent)
 	if d = web.CheckAgent(ua); d != nil {
 		// Handled by web.CheckAgent

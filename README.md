@@ -31,7 +31,7 @@ GuardianTUI operates as a transparent layer between the internet and your applic
 
 ---
 
-## 🚨 Zero Tolerance: Anti-CSAM Shield
+### 🚨 Zero Tolerance: Anti-CSAM Shield
 GuardianTUI incorporates a specialized **Illicit Content Shield** designed to identify and block requests related to child sexual abuse material (CSAM).
 
 - **🧠 Heuristic Scoring Engine**: Beyond simple keywords, it uses a multi-layered scoring system that analyzes combinations of terms and context.
@@ -39,6 +39,17 @@ GuardianTUI incorporates a specialized **Illicit Content Shield** designed to id
 - **🚨 Priority Scanning**: This check runs with **absolute priority** before any other security analysis, ensuring zero tolerance for illicit content.
 - **🤖 Integrated AI Safety**: Deep integration with the **AI Shield** to detect and block attempts to generate, describe, or roleplay illicit content via LLMs.
 - **📊 Detailed Alerts**: Incidents are flagged specifically as `ZERO TOLERANCE: CSAM Shield` in the TUI and logs for immediate forensic awareness.
+
+---
+
+### 💣 Metasploit & Exploit Shield
+Advanced protection against common exploitation frameworks and automated attack tools.
+
+- **🕵️ Meterpreter Detection**: Identifies Meterpreter HTTP/HTTPS transport patterns, including Payload UUIDs and session polling strings (`RECV`).
+- **🧮 URI Checksum Heuristics**: Implements the Metasploit 8-bit checksum algorithm to identify stagers even with randomized alphanumeric URIs.
+- **🐚 PowerShell Stager Defense**: Blocks common "One-Liner" download/execute stagers used by `web_delivery` and other MSF modules.
+- **🛠️ Known Exploit Mitigation**: Built-in signatures for critical vulnerabilities like **Log4j (JNDI)**, **Struts2 (OGNL)**, and Java deserialization attacks.
+
 
 ---
 
