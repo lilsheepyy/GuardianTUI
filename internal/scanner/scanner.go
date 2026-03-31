@@ -29,6 +29,11 @@ type Detection struct {
 	Type    string
 }
 
+type CompiledDetection struct {
+	Detection Detection
+	Regex     *regexp.Regexp
+}
+
 // Base patterns for traditional web attacks
 var patterns = []Detection{
 	{Pattern: `(?i)(union(?:\s+all)?\s+select|select.*from|drop\s+table|insert\s+into|truncate\s+table|delete\s+from|waitfor\s+delay|1=1|' OR '1'='1|--|#|' OR 'x'='x|"\s+or\s+"x"="x|admin'\s+--|admin'\s+#|' OR TRUE--|"\s+OR\s+TRUE--)`, Level: LevelCritical, Type: "SQL Injection"},
@@ -39,6 +44,8 @@ var patterns = []Detection{
 	{Pattern: `(?i)(\$gt|\$ne|\$in|\$where|\$regex|\$expr|\$exists|\$and|\$or|\$not)`, Level: LevelHigh, Type: "NoSQL Injection"},
 	{Pattern: `(?i)({{\s*.*?\s*}}|\${\s*.*?\s*}|<%\s*.*?\s*%>|{{7\*7}}|{{config\.items\(\)}})`, Level: LevelHigh, Type: "SSTI Attempt"},
 }
+
+var compiledPatterns []CompiledDetection
 
 var maliciousAgents = []string{
 	"sqlmap", "nmap", "nikto", "dirbuster", "masscan", "zgrab", "nuclei", "burpsuite",
@@ -57,34 +64,33 @@ type CSAMHeuristic struct {
 	Weight      int
 	Pattern     string
 	Description string
+	Regex       *regexp.Regexp
 }
 
 var csamHeuristics = []CSAMHeuristic{
 	// Level 5: Direct & Critical (Instant Block)
-	{5, `(?i)\b(child[ _-]?(porn|pornography|sex|abuse|rape|pornografy))\b`, "Direct CSAM Terminology"},
-	{5, `(?i)\b(cp|csam|kiddie|pedo|pedophile|pedofilia|pedofilo|lolita|jailbait|cub)\b`, "Illicit Slang/Acronyms"},
-	{5, `(?i)\b(pre-?teen|underage|minor|child).*(porn|sex|nude|naked)\b`, "Illicit Combinations"},
+	{Weight: 5, Pattern: `(?i)\b(child[ _-]?(porn|pornography|sex|abuse|rape|pornografy))\b`, Description: "Direct CSAM Terminology"},
+	{Weight: 5, Pattern: `(?i)\b(cp|csam|kiddie|pedo|pedophile|pedofilia|pedofilo|lolita|jailbait|cub)\b`, Description: "Illicit Slang/Acronyms"},
+	{Weight: 5, Pattern: `(?i)\b(pre-?teen|underage|minor|child).*(porn|sex|nude|naked)\b`, Description: "Illicit Combinations"},
 	
 	// Level 2-3: Suspicious Context (Requires combination to block)
-	{3, `(?i)\b(young|little|small|tiny).*(girl|boy|child|kid).*(nude|naked|action)\b`, "Suspicious Context: Age + Content"},
-	{2, `(?i)\b(links|mega|drive|folder|pack|collection).*(cp|csam|kiddie)\b`, "Distribution Attempt"},
-	{3, `(?i)\b(barely|legal|teen|school).*(girl|boy)\b`, "Borderline/High-Risk Content"},
-	{2, `(?i)\b(trade|exchange|buy|sell|request).*(cp|csam)\b`, "Solicitation Indicators"},
+	{Weight: 3, Pattern: `(?i)\b(young|little|small|tiny).*(girl|boy|child|kid).*(nude|naked|action)\b`, Description: "Suspicious Context: Age + Content"},
+	{Weight: 2, Pattern: `(?i)\b(links|mega|drive|folder|pack|collection).*(cp|csam|kiddie)\b`, Description: "Distribution Attempt"},
+	{Weight: 3, Pattern: `(?i)\b(barely|legal|teen|school).*(girl|boy)\b`, Description: "Borderline/High-Risk Content"},
+	{Weight: 2, Pattern: `(?i)\b(trade|exchange|buy|sell|request).*(cp|csam)\b`, Description: "Solicitation Indicators"},
 }
+
+var csamLeetspeakReplacer *strings.Replacer
 
 func analyzeCSAM(input string) *Detection {
 	score := 0
 	matched := []string{}
 	
 	// Normalize for leetspeak/obfuscation
-	leetspeak := strings.NewReplacer(
-		"@", "a", "4", "a", "3", "e", "1", "i", "!", "i", "0", "o", "7", "t", "5", "s", "$", "s",
-	)
-	normalizedInput := leetspeak.Replace(strings.ToLower(input))
+	normalizedInput := csamLeetspeakReplacer.Replace(strings.ToLower(input))
 
 	for _, h := range csamHeuristics {
-		re := regexp.MustCompile(h.Pattern)
-		if re.MatchString(normalizedInput) {
+		if h.Regex.MatchString(normalizedInput) {
 			score += h.Weight
 			matched = append(matched, h.Description)
 			
@@ -116,25 +122,60 @@ type AIHeuristic struct {
 	Weight      int    `json:"weight"`
 	Pattern     string `json:"pattern"`
 	Description string `json:"description"`
+	Regex       *regexp.Regexp `json:"-"`
 }
 
 var baseAIHeuristics = []AIHeuristic{
 	// --- ZERO TOLERANCE: AI CSAM SHIELD ---
-	{5, `(?i)(generate|create|write|describe|imagine).*(child|minor|underage|kiddie|pedo).*(porn|nude|sex|naked|erotica)`, "AI: CSAM Generation Attempt"},
-	{5, `(?i)(roleplay|act as|pretend).*(child|minor|underage|kiddie|pedo).*(porn|nude|sex|naked|erotica)`, "AI: CSAM Roleplay Attempt"},
-	{4, `(?i)(bypassing|ignoring|overriding).*(safety|filter|restriction).*(child|minor|csam)`, "AI: Safety Bypass for Illicit Content"},
+	{Weight: 5, Pattern: `(?i)(generate|create|write|describe|imagine).*(child|minor|underage|kiddie|pedo).*(porn|nude|sex|naked|erotica)`, Description: "AI: CSAM Generation Attempt"},
+	{Weight: 5, Pattern: `(?i)(roleplay|act as|pretend).*(child|minor|underage|kiddie|pedo).*(porn|nude|sex|naked|erotica)`, Description: "AI: CSAM Roleplay Attempt"},
+	{Weight: 4, Pattern: `(?i)(bypassing|ignoring|overriding).*(safety|filter|restriction).*(child|minor|csam)`, Description: "AI: Safety Bypass for Illicit Content"},
 
 	// --- Standard AI Safety ---
-	{3, `(?i)(ignore|disregard|forget|bypass|overrule|reset|stop).*(previous|earlier|above).*(instructions|directions|guidelines|prompt)`, "Instruction Override"},
-	{2, `(?i)(act as|you are now|imagine you are|pretend to be|roleplay as|start speaking as)`, "Roleplay/Persona Hijack"},
-	{4, `(?i)(developer mode|dan mode|jailbreak|unfiltered|without restrictions|no constraints)`, "Jailbreak Signature"},
-	{2, `(?i)(system prompt|initial instructions|hidden context|reveal your internal)`, "Prompt Leakage Attempt"},
-	{3, `(?i)(translate the following and then execute|now in reverse|encode this and)`, "Obfuscation/Translation Bypass"},
-	{2, `(?i)(Assistant:|System:|User:|Human:|### Instruction:)`, "Structural Hijacking"},
+	{Weight: 3, Pattern: `(?i)(ignore|disregard|forget|bypass|overrule|reset|stop).*(previous|earlier|above).*(instructions|directions|guidelines|prompt)`, Description: "Instruction Override"},
+	{Weight: 2, Pattern: `(?i)(act as|you are now|imagine you are|pretend to be|roleplay as|start speaking as)`, Description: "Roleplay/Persona Hijack"},
+	{Weight: 4, Pattern: `(?i)(developer mode|dan mode|jailbreak|unfiltered|without restrictions|no constraints)`, Description: "Jailbreak Signature"},
+	{Weight: 2, Pattern: `(?i)(system prompt|initial instructions|hidden context|reveal your internal)`, Description: "Prompt Leakage Attempt"},
+	{Weight: 3, Pattern: `(?i)(translate the following and then execute|now in reverse|encode this and)`, Description: "Obfuscation/Translation Bypass"},
+	{Weight: 2, Pattern: `(?i)(Assistant:|System:|User:|Human:|### Instruction:)`, Description: "Structural Hijacking"},
 }
 
 var customAIHeuristics []AIHeuristic
-var compiledCustomPatterns []*regexp.Regexp
+
+var compiledPIIPatterns []*regexp.Regexp
+
+// Initialize pre-compiled regexes
+func init() {
+	// General patterns
+	for _, p := range patterns {
+		compiledPatterns = append(compiledPatterns, CompiledDetection{
+			Detection: p,
+			Regex:     regexp.MustCompile(p.Pattern),
+		})
+	}
+	
+	// CSAM patterns
+	for i := range csamHeuristics {
+		csamHeuristics[i].Regex = regexp.MustCompile(csamHeuristics[i].Pattern)
+	}
+	csamLeetspeakReplacer = strings.NewReplacer(
+		"@", "a", "4", "a", "3", "e", "1", "i", "!", "i", "0", "o", "7", "t", "5", "s", "$", "s",
+	)
+
+	// AI patterns
+	for i := range baseAIHeuristics {
+		baseAIHeuristics[i].Regex = regexp.MustCompile(baseAIHeuristics[i].Pattern)
+	}
+
+	// PII patterns
+	piiPatterns := []string{
+		`(?i)(4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})`, 
+		`(?i)([0-9]{3}-[0-9]{2}-[0-9]{4})`,
+	}
+	for _, p := range piiPatterns {
+		compiledPIIPatterns = append(compiledPIIPatterns, regexp.MustCompile(p))
+	}
+}
 
 func LoadCustomAIRules(path string) error {
 	data, err := os.ReadFile(path)
@@ -144,9 +185,12 @@ func LoadCustomAIRules(path string) error {
 	}
 	var rules []AIHeuristic
 	if err := json.Unmarshal(data, &rules); err != nil { return err }
+	
+	// Precompile custom rules
+	for i := range rules {
+		rules[i].Regex = regexp.MustCompile(rules[i].Pattern)
+	}
 	customAIHeuristics = rules
-	compiledCustomPatterns = make([]*regexp.Regexp, len(rules))
-	for i, r := range rules { compiledCustomPatterns[i] = regexp.MustCompile(r.Pattern) }
 	return nil
 }
 
@@ -307,15 +351,15 @@ func analyzeAIAbuse(input string, threshold int) *Detection {
 	semanticInput = strings.Join(strings.Fields(semanticInput), " ")
 
 	for _, h := range baseAIHeuristics {
-		if regexp.MustCompile(h.Pattern).MatchString(semanticInput) {
+		if h.Regex.MatchString(semanticInput) {
 			score += h.Weight
 			matchedPatterns = append(matchedPatterns, h.Description)
 		}
 	}
-	for i, re := range compiledCustomPatterns {
-		if re.MatchString(semanticInput) {
-			score += customAIHeuristics[i].Weight
-			matchedPatterns = append(matchedPatterns, customAIHeuristics[i].Description)
+	for _, h := range customAIHeuristics {
+		if h.Regex.MatchString(semanticInput) {
+			score += h.Weight
+			matchedPatterns = append(matchedPatterns, h.Description)
 		}
 	}
 
@@ -328,12 +372,8 @@ func analyzeAIAbuse(input string, threshold int) *Detection {
 	}
 
 	// PII
-	piiPatterns := []string{
-		`(?i)(4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})`, 
-		`(?i)([0-9]{3}-[0-9]{2}-[0-9]{4})`,
-	}
-	for _, p := range piiPatterns {
-		if regexp.MustCompile(p).MatchString(input) {
+	for _, re := range compiledPIIPatterns {
+		if re.MatchString(input) {
 			return &Detection{Pattern: "Sensitive Pattern", Level: LevelMedium, Type: "AI: PII Data Leakage"}
 		}
 	}
@@ -359,8 +399,15 @@ func matchPatterns(input string, maxSize int) *Detection {
 	if input == "" { return nil }
 	scanInput := input
 	if len(input) > maxSize { scanInput = input[:maxSize] }
-	for i, d := range patterns {
-		if regexp.MustCompile(d.Pattern).MatchString(scanInput) { return &patterns[i] }
+	for _, cp := range compiledPatterns {
+		if cp.Regex.MatchString(scanInput) { 
+			// Return a copy to avoid mutating the base array pointer
+			return &Detection{
+				Pattern: cp.Detection.Pattern,
+				Level:   cp.Detection.Level,
+				Type:    cp.Detection.Type,
+			}
+		}
 	}
 	return nil
 }

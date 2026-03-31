@@ -27,6 +27,7 @@ func main() {
 	domain := flag.String("domain", "", "Auto-provision real Let's Encrypt SSL for this domain")
 	whitelistFlag := flag.String("whitelist", "", "Comma-separated list of IPs or CIDR ranges to whitelist")
 	useHTTPS := flag.Bool("https", false, "Enable local self-signed HTTPS mode")
+	headless := flag.Bool("headless", false, "Run without TUI (useful for background/production)")
 	flag.Parse()
 
 	// Load Config
@@ -115,9 +116,14 @@ func main() {
 		log.Fatal(http.ListenAndServe(*listen, engine))
 	}()
 
-	p := tea.NewProgram(tui.NewModel(tuiChan), tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error starting TUI: %v\n", err)
-		os.Exit(1)
+	if *headless {
+		// Just block forever in headless mode
+		select {}
+	} else {
+		p := tea.NewProgram(tui.NewModel(tuiChan), tea.WithAltScreen())
+		if _, err := p.Run(); err != nil {
+			fmt.Printf("Error starting TUI: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }

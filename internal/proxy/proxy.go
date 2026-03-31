@@ -62,14 +62,15 @@ type LogEntry struct {
 }
 
 type Engine struct {
-	TargetURL      *url.URL
-	Proxy          *httputil.ReverseProxy
-	BlockedIPs     sync.Map
-	BlockedSubnets []*net.IPNet
-	Whitelist      []*net.IPNet
-	LogChan        chan LogEntry
-	Config         *Config
-	mu             sync.RWMutex
+	TargetURL       *url.URL
+	Proxy           *httputil.ReverseProxy
+	BlockedIPs      sync.Map
+	BlockedSubnets  []*net.IPNet
+	BlockedExactIPs map[string]bool
+	Whitelist       []*net.IPNet
+	LogChan         chan LogEntry
+	Config          *Config
+	mu              sync.RWMutex
 }
 
 func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, error) {
@@ -129,17 +130,6 @@ func (e *Engine) AddBlockedSubnet(cidr string) error {
 	return nil
 }
 
-func (e *Engine) IsIPBlockedBySubnet(ipStr string) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	ip := net.ParseIP(ipStr)
-	if ip == nil { return false }
-	for _, subnet := range e.BlockedSubnets {
-		if subnet.Contains(ip) { return true }
-	}
-	return false
-}
-
 func (e *Engine) StartAutoUpdate() {
 	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
@@ -149,7 +139,8 @@ func (e *Engine) StartAutoUpdate() {
 	}()
 }
 
-func (e *Engine) sanitizer(data string) (cleaned []string, subnets []*net.IPNet) {
+func (e *Engine) sanitizer(data string) (cleaned []string, subnets []*net.IPNet, exactIPs map[string]bool) {
+	exactIPs = make(map[string]bool)
 	lines := strings.Split(data, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -160,9 +151,18 @@ func (e *Engine) sanitizer(data string) (cleaned []string, subnets []*net.IPNet)
 		if len(fields) > 0 {
 			cleanIP := strings.TrimSpace(fields[0])
 			if strings.Contains(cleanIP, ".") || strings.Contains(cleanIP, ":") {
-				if subnet, err := e.parseCIDR(cleanIP); err == nil {
-					cleaned = append(cleaned, cleanIP)
-					subnets = append(subnets, subnet)
+				if !strings.Contains(cleanIP, "/") {
+					// It's an exact IP
+					if ip := net.ParseIP(cleanIP); ip != nil {
+						exactIPs[ip.String()] = true
+						cleaned = append(cleaned, cleanIP)
+					}
+				} else {
+					// It's a subnet
+					if subnet, err := e.parseCIDR(cleanIP); err == nil {
+						cleaned = append(cleaned, cleanIP)
+						subnets = append(subnets, subnet)
+					}
 				}
 			}
 		}
@@ -172,14 +172,18 @@ func (e *Engine) sanitizer(data string) (cleaned []string, subnets []*net.IPNet)
 
 func (e *Engine) UpdateBlocklists() {
 	var allSubnets []*net.IPNet
+	allExactIPs := make(map[string]bool)
 	os.MkdirAll("proxylistblock", 0755)
 
 	process := func(name, data string) {
-		cleanStrings, subnets := e.sanitizer(data)
+		cleanStrings, subnets, exactIPs := e.sanitizer(data)
 		if len(cleanStrings) > 0 {
 			// Save the CLEAN, SANITIZED version
 			os.WriteFile(fmt.Sprintf("proxylistblock/%s", name), []byte(strings.Join(cleanStrings, "\n")), 0644)
 			allSubnets = append(allSubnets, subnets...)
+			for ip := range exactIPs {
+				allExactIPs[ip] = true
+			}
 		}
 	}
 
@@ -209,20 +213,17 @@ func (e *Engine) UpdateBlocklists() {
 		process(name, string(data))
 	}
 
-	// 3. Atomically swap the active subnets
+	// 3. Atomically swap the active subnets and exact IPs
 	e.mu.Lock()
 	e.BlockedSubnets = allSubnets
+	e.BlockedExactIPs = allExactIPs
 	e.mu.Unlock()
 }
 
 func (e *Engine) LoadBlocklist(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil { return err }
-	_, subnets := e.sanitizer(string(data))
-	e.mu.Lock()
-	e.BlockedSubnets = append(e.BlockedSubnets, subnets...)
-	e.mu.Unlock()
-	return nil
+	return e.ParseBlocklist(string(data))
 }
 
 func (e *Engine) FetchRemoteBlocklist(url string) error {
@@ -232,19 +233,41 @@ func (e *Engine) FetchRemoteBlocklist(url string) error {
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil { return err }
-	_, subnets := e.sanitizer(string(data))
+	return e.ParseBlocklist(string(data))
+}
+
+func (e *Engine) ParseBlocklist(data string) error {
+	_, subnets, exactIPs := e.sanitizer(data)
 	e.mu.Lock()
 	e.BlockedSubnets = append(e.BlockedSubnets, subnets...)
+	if e.BlockedExactIPs == nil {
+		e.BlockedExactIPs = make(map[string]bool)
+	}
+	for ip := range exactIPs {
+		e.BlockedExactIPs[ip] = true
+	}
 	e.mu.Unlock()
 	return nil
 }
 
-func (e *Engine) ParseBlocklist(data string) error {
-	_, subnets := e.sanitizer(data)
-	e.mu.Lock()
-	e.BlockedSubnets = append(e.BlockedSubnets, subnets...)
-	e.mu.Unlock()
-	return nil
+func (e *Engine) IsIPBlockedBySubnet(ipStr string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil { return false }
+	parsedStr := ip.String()
+
+	// O(1) lookup for exact IPs
+	if e.BlockedExactIPs != nil && e.BlockedExactIPs[parsedStr] {
+		return true
+	}
+
+	// O(N) lookup for subnets
+	for _, subnet := range e.BlockedSubnets {
+		if subnet.Contains(ip) { return true }
+	}
+	return false
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {

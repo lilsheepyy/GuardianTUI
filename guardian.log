@@ -176,3 +176,18 @@
 [2026-03-31 01:14:09] ID:07b509fd IP:127.0.0.1 GET / | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
 [2026-03-31 01:15:24] ID:52b0f035 IP:127.0.0.1 GET / | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
 [2026-03-31 01:15:47] ID:6b47ac4b IP:127.0.0.1 GET / | Status:OK | Agent:Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
+[2026-03-31 03:38:57] ID:761c3e38 IP:::1 GET / | Status:OK | Agent:Mozilla/5.0
+[2026-03-31 03:47:07] ID:83c16336 IP:::1 GET / | Status:OK | Agent:Mozilla/5.0
+[2026-03-31 03:52:41] ID:177956f4 IP:::1 GET / | Status:OK | Agent:Mozilla/5.0
+[2026-03-31 03:52:41] ID:7f45e1b4 IP:::1 GET /search | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:52:41] ID:7ed52cfe IP:::1 POST /upload | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:52:41] ID:489d8c28 IP:::1 POST /upload | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:52:41] ID:1760fb13 IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:52:41] ID:cdd8f80b IP:::1 POST /v1/chat | Status:OK | Agent:Mozilla/5.0
+[2026-03-31 03:54:12] ID:ad4155b9 IP:::1 GET / | Status:OK | Agent:Mozilla/5.0
+[2026-03-31 03:54:12] ID:af017b8a IP:::1 GET /search | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:54:12] ID:aedc6e12 IP:::1 POST /upload | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:54:13] ID:169ef848 IP:::1 POST /upload | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:54:13] ID:60691e9c IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:54:13] ID:d123510e IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-03-31 03:54:13] ID:91530345 IP:::1 GET / | Status:BLOCKED | Agent:zgrab/0.x
