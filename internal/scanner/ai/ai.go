@@ -22,12 +22,13 @@ type AIHeuristic struct {
 
 var baseAIHeuristics = []AIHeuristic{
 	// --- ZERO TOLERANCE: AI CSAM SHIELD ---
-	{Weight: 5, Pattern: `(?i)(generate|create|write|describe|imagine).*(child|minor|underage|kiddie|pedo).*(porn|nude|sex|naked|erotica)`, Description: "AI: CSAM Generation Attempt"},
-	{Weight: 5, Pattern: `(?i)(roleplay|act as|pretend).*(child|minor|underage|kiddie|pedo).*(porn|nude|sex|naked|erotica)`, Description: "AI: CSAM Roleplay Attempt"},
-	{Weight: 4, Pattern: `(?i)(bypassing|ignoring|overriding).*(safety|filter|restriction).*(child|minor|csam)`, Description: "AI: Safety Bypass for Illicit Content"},
+	// Improved patterns to detect combinations regardless of order
+	{Weight: 5, Pattern: `(?i)(generate|create|write|describe|imagine).*((child|minor|underage|kiddie|pedo).* (porn|nude|sex|naked|erotica)|(porn|nude|sex|naked|erotica).*(child|minor|underage|kiddie|pedo|kid))`, Description: "AI: CSAM Generation Attempt"},
+	{Weight: 5, Pattern: `(?i)(roleplay|act as|pretend).*((child|minor|underage|kiddie|pedo).* (porn|nude|sex|naked|erotica)|(porn|nude|sex|naked|erotica).*(child|minor|underage|kiddie|pedo|kid))`, Description: "AI: CSAM Roleplay Attempt"},
+	{Weight: 4, Pattern: `(?i)(bypassing|ignoring|overriding).*(safety|filter|restriction).*(child|minor|csam|kid)`, Description: "AI: Safety Bypass for Illicit Content"},
 
 	// --- Standard AI Safety ---
-	{Weight: 3, Pattern: `(?i)(ignore|disregard|forget|bypass|overrule|reset|stop).*(previous|earlier|above).*(instructions|directions|guidelines|prompt)`, Description: "Instruction Override"},
+	{Weight: 3, Pattern: `(?i)(ignore|disregard|forget|bypass|overrule|reset|stop).*(instruction|direction|guideline|prompt)`, Description: "Instruction Override"},
 	{Weight: 2, Pattern: `(?i)(act as|you are now|imagine you are|pretend to be|roleplay as|start speaking as)`, Description: "Roleplay/Persona Hijack"},
 	{Weight: 4, Pattern: `(?i)(developer mode|dan mode|jailbreak|unfiltered|without restrictions|no constraints)`, Description: "Jailbreak Signature"},
 	{Weight: 2, Pattern: `(?i)(system prompt|initial instructions|hidden context|reveal your internal)`, Description: "Prompt Leakage Attempt"},

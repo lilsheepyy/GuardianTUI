@@ -87,12 +87,14 @@ func Scan(params ScanParams) *Detection {
 		if params.IsAI {
 			if aiD := ai.AnalyzeAIAbuse(bodyNorm, params.AIScoreThreshold); aiD != nil {
 				d = aiD
-			} else if piiD := pii.AnalyzePII(bodyNorm); piiD != nil {
-				d = piiD
 			}
 		}
+		// If AI didn't catch it or not an AI endpoint, check PII and general patterns
 		if d == nil {
-			if d = web.MatchPatterns(bodyNorm, params.MaxScanSize); d != nil {
+			if piiD := pii.AnalyzePII(bodyNorm); piiD != nil {
+				d = piiD
+			} else if webD := web.MatchPatterns(bodyNorm, params.MaxScanSize); webD != nil {
+				d = webD
 				d.Type = "Body Attack: " + d.Type
 			}
 		}

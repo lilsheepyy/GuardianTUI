@@ -2,3 +2,4 @@ cert.crt
 cert.key
 blocklist.txt
 proxylistblock/
+test_suite.sh

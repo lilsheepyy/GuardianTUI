@@ -275,6 +275,18 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil { remoteIP = r.RemoteAddr }
 	incidentID := uuid.New().String()[:8]
 
+	// Determine if this is an AI endpoint
+	isAI := false
+	reqPath := r.URL.Path
+	if e.Config != nil {
+		for _, ep := range e.Config.AIProtection.Endpoints {
+			if strings.HasPrefix(reqPath, ep) {
+				isAI = true
+				break
+			}
+		}
+	}
+
 	if e.IsWhitelisted(remoteIP) {
 		e.Proxy.ServeHTTP(w, r)
 		return
@@ -302,20 +314,11 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var bodyCaptured string
+
 	if r.Body != nil {
 		body, _ := io.ReadAll(r.Body)
 		bodyCaptured = string(body)
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
-	}
-
-	isAI := false
-	if e.Config != nil {
-		for _, ep := range e.Config.AIProtection.Endpoints {
-			if strings.HasPrefix(r.URL.Path, ep) {
-				isAI = true
-				break
-			}
-		}
 	}
 
 	decodedPath, _ := url.PathUnescape(r.URL.Path)
