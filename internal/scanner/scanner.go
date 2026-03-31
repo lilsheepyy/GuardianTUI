@@ -9,6 +9,7 @@ import (
 	"guardiantui/internal/scanner/metasploit"
 	"guardiantui/internal/scanner/models"
 	"guardiantui/internal/scanner/pii"
+	"guardiantui/internal/scanner/shell"
 	"guardiantui/internal/scanner/utils"
 	"guardiantui/internal/scanner/web"
 )
@@ -47,8 +48,11 @@ func Scan(params ScanParams) *Detection {
 		return csamDet
 	}
 
-	// 2. Metasploit/Exploit Shield
+	// 2. Metasploit & Reverse Shell Shields
 	if d = metasploit.CheckChecksum(params.Path); d != nil {
+		return d
+	}
+	if d = shell.AnalyzeShell(combinedInput); d != nil {
 		return d
 	}
 	if d = metasploit.AnalyzeMSF(combinedInput); d != nil {

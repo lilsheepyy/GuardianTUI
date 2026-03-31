@@ -51,6 +51,16 @@ Advanced protection against common exploitation frameworks and automated attack 
 - **🛠️ Generic Exploit Mitigation**: Generic signatures for critical vulnerability classes like **Log4j (JNDI)**, **Struts2 (OGNL)**, and Java deserialization attacks.
 - **📦 Modular Architecture**: Logic is isolated in a dedicated `metasploit` package for high-performance inspection.
 
+---
+
+### 🐚 Reverse Shell Shield
+Real-time detection of TCP/UDP reverse shell one-liners and socket redirection payloads.
+
+- **🖥️ Multi-Language Support**: Signatures for Bash, Python, Perl, PHP, Ruby, and Lua reverse shells.
+- **🛡️ Socket Defense**: Identifies common `/dev/tcp` and `/dev/udp` redirections.
+- **🔧 Netcat Mitigation**: Detects Netcat execution flags (`-e`, `-c`) and FIFO backpipe shell patterns.
+- **⚡ Zero-Latency Filtering**: Pre-compiled regex patterns ensure no performance impact during deep packet inspection.
+
 
 ---
 
