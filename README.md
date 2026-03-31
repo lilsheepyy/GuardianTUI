@@ -86,6 +86,26 @@ Real-time detection of TCP/UDP reverse shell one-liners and socket redirection p
 - **🔧 Netcat Mitigation**: Detects Netcat execution flags (`-e`, `-c`) and FIFO backpipe shell patterns.
 - **⚡ Zero-Latency Filtering**: Pre-compiled regex patterns ensure no performance impact during deep packet inspection.
 
+---
+
+### 📦 DLP Shield (Data Loss Prevention)
+A dedicated package (`internal/scanner/dlp`) designed to prevent information disclosure both inbound and outbound.
+
+- **🛡️ Inbound Protection**: Automatically blocks requests for sensitive files like `.env`, `.git/`, SSH private keys (`id_rsa`), and configuration files.
+- **🛡️ Outbound Redaction**: Intercepts text-based response bodies and automatically redacts leaked secrets (AWS Keys, GitHub Tokens, Database Strings, JWTs) with `[REDACTED SECRET]`.
+- **🛡️ Audit Awareness**: Injects an `X-DLP-Warning` header into responses whenever sensitive data is redacted to alert developers.
+
+---
+
+### 📡 Offensive Tooling & Framework Shields
+GuardianTUI is pre-configured to detect and block the most common offensive security frameworks and scanners.
+
+- **🗺️ Nmap Shield**: Blocks **Nmap Scripting Engine (NSE)** probes, identifying specific payloads like `http-sql-injection`, `http-shellshock`, and `http-enum`.
+- **🧪 Nuclei & Template Scanning**: Detects OAST interaction domains (Interactsh, Oastify, Oast.pro) and Nuclei-specific headers.
+- **☕ Burp Suite Defense**: Identifies Burp Collaborator payloads, Oastify interactions, and intruder/spidering patterns.
+- **🐝 BeEF Framework**: Specifically blocks the Browser Exploitation Framework by targeting `hook.js` and common panel endpoints.
+- **🔥 Log4j / JNDI / OGNL**: Protects against remote code execution via `${jndi:ldap...}` and other expression language injections.
+
 
 ---
 
