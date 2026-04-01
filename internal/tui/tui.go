@@ -190,7 +190,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Dynamic reserved height calculation based on component visibility
 		// Base UI (Header, Stats, Terminal, Footer, Padding) = ~12 lines
-		// + 4 lines for global padding (2 top, 2 bottom)
+		// +4 rows for 2-top/2-bottom global padding
 		reservedHeight := 17 
 		showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
 		
@@ -209,13 +209,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table.SetHeight(newHeight)
 
 		// Dynamic column widths based on terminal width
-		// Adjusted for global 4-char horizontal padding
 		idW, timeW, ipW, statusW := 8, 10, 16, 30
 		if m.width < 100 {
 			idW, timeW, ipW, statusW = 6, 9, 15, 20
 		}
 
-		totalWidth := m.width - 14 // Account for table borders, app padding, and global padding
+		// Account for table borders, app padding, AND new global padding
+		totalWidth := m.width - 14 
 		pathW := totalWidth - idW - timeW - ipW - statusW
 		if pathW < 10 {
 			pathW = 10
@@ -467,7 +467,7 @@ func (m model) renderStats() string {
 	)
 
 	// Responsive stats boxes
-	boxWidth := (m.width - 12) / 4
+	boxWidth := (m.width - 16) / 4 // Account for padding
 	if boxWidth < 15 { boxWidth = 15 }
 	if boxWidth > 25 { boxWidth = 25 }
 
@@ -487,7 +487,7 @@ func (m model) renderStats() string {
 			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s3), lipgloss.NewStyle().Width(1).Render(" "), styleBox.Width(boxWidth).Render(s4)),
 		)
 	}
-	return lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center, row)
+	return lipgloss.PlaceHorizontal(m.width-8, lipgloss.Center, row)
 }
 
 func (m model) renderThreatDistribution() string {
@@ -527,7 +527,7 @@ func (m model) renderThreatDistribution() string {
 	}
 	
 	distWidth := 45
-	if m.width < 110 { distWidth = m.width - 10 }
+	if m.width < 110 { distWidth = m.width - 14 }
 	return styleBox.Width(distWidth).Height(8).Render(b.String())
 }
 
@@ -537,7 +537,7 @@ func (m model) renderActivityChart() string {
 
 	height := 5 // Reduced height to save space
 	chartWidth := 60
-	if m.width < 110 { chartWidth = m.width - 20 }
+	if m.width < 110 { chartWidth = m.width - 24 }
 	if chartWidth < 20 { chartWidth = 20 }
 
 	var b strings.Builder
@@ -589,8 +589,8 @@ func (m model) View() string {
 		return "Initializing Dashboard..."
 	}
 
-	// 2 rows top/bottom, 2 columns left/right padding
-	effectiveWidth := m.width - 4
+	// Calculate content area width (m.width - 4 columns padding)
+	contentWidth := m.width - 4
 
 	// 1. Header Section
 	headerStyle := lipgloss.NewStyle().
@@ -598,7 +598,7 @@ func (m model) View() string {
 		Background(m.theme.Secondary).
 		Bold(true).
 		Padding(0, 2).
-		Width(effectiveWidth).
+		Width(contentWidth).
 		Align(lipgloss.Center)
 
 	modeStr := "IPS (ACTIVE)"
@@ -618,7 +618,7 @@ func (m model) View() string {
 	
 	if showCharts {
 		if m.width >= 110 {
-			vizRow = lipgloss.PlaceHorizontal(effectiveWidth, lipgloss.Center,
+			vizRow = lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center,
 				lipgloss.JoinHorizontal(lipgloss.Top,
 					m.renderActivityChart(),
 					lipgloss.NewStyle().Width(2).Render(" "),
@@ -626,7 +626,7 @@ func (m model) View() string {
 				),
 			)
 		} else {
-			vizRow = lipgloss.PlaceHorizontal(effectiveWidth, lipgloss.Center,
+			vizRow = lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center,
 				lipgloss.JoinVertical(lipgloss.Center,
 					m.renderActivityChart(),
 					m.renderThreatDistribution(),
@@ -641,7 +641,7 @@ func (m model) View() string {
 	termStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
 		BorderForeground(m.theme.Dim).
-		Width(effectiveWidth).
+		Width(contentWidth - 2).
 		Padding(0, 1)
 
 	if m.searching {
@@ -654,7 +654,7 @@ func (m model) View() string {
 		if m.width > 100 {
 			helpText = "[/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE"
 		}
-		helpStyle := lipgloss.NewStyle().Foreground(m.theme.Dim).Width(effectiveWidth - 2)
+		helpStyle := lipgloss.NewStyle().Foreground(m.theme.Dim).Width(contentWidth - 4)
 		cmdArea = termStyle.Render(helpStyle.Render(helpText))
 	}
 
@@ -664,7 +664,7 @@ func (m model) View() string {
 		BorderForeground(m.theme.Dim).
 		Padding(0).
 		MarginTop(1).
-		Width(effectiveWidth).
+		Width(contentWidth).
 		Render(m.table.View())
 
 	// 6. Status/Alert Footer
@@ -672,7 +672,7 @@ func (m model) View() string {
 	footerStyle := lipgloss.NewStyle().
 		Bold(true).
 		Padding(0, 1).
-		Width(effectiveWidth)
+		Width(contentWidth)
 
 	footerTS := " | " + time.Now().Format("15:04:05")
 	if m.width < 60 { footerTS = "" }
@@ -681,25 +681,28 @@ func (m model) View() string {
 		statusLine = footerStyle.
 			Background(m.theme.Alert).
 			Foreground(m.theme.Text).
-			Render(" 🚨 CRITICAL: " + truncateString(m.lastAlert, effectiveWidth-25) + footerTS)
+			Render(" 🚨 CRITICAL: " + truncateString(m.lastAlert, contentWidth-25) + footerTS)
 	} else {
 		statusLine = footerStyle.
 			Background(m.theme.Success).
 			Foreground(lipgloss.Color("#000")).
-			Render(" ✨ MONITORING ACTIVE" + truncateString(" - ALL SYSTEMS NOMINAL", effectiveWidth-25) + footerTS)
+			Render(" ✨ MONITORING ACTIVE" + truncateString(" - ALL SYSTEMS NOMINAL", contentWidth-25) + footerTS)
 	}
 
-	// Final Assembly with global padding
-	return lipgloss.NewStyle().Padding(2, 2).Render(
-		lipgloss.JoinVertical(lipgloss.Left,
-			header,
-			"\n",
-			statsRow,
-			vizRow,
-			cmdArea,
-			tableBox,
-			"\n",
-			statusLine,
+	// Final Assembly with Global Padding (2 rows top/bottom, 2 columns left/right)
+	mainContent := lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		"\n",
+		lipgloss.NewStyle().Padding(0, 2).Render(
+			lipgloss.JoinVertical(lipgloss.Left,
+				statsRow,
+				vizRow,
+				cmdArea,
+				tableBox,
+			),
 		),
+		statusLine,
 	)
+
+	return lipgloss.NewStyle().Padding(2, 2).Render(mainContent)
 }
