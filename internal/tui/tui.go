@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"guardiantui/internal/proxy"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,27 +14,43 @@ import (
 )
 
 var (
-	baseStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240"))
-	
-	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
-			Bold(true)
-	
-	alertStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("9")).
-			Bold(true)
-	
-	okStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("10"))
+	// Modern Cyber Palette
+	colorCyberCyan    = lipgloss.Color("#00f2ff")
+	colorAlertRed     = lipgloss.Color("#ff2e63")
+	colorSuccessGreen = lipgloss.Color("#08ffc8")
+	colorGhostWhite   = lipgloss.Color("#eaeaea")
+	colorSlateGrey    = lipgloss.Color("#252a34")
+	colorDimGrey      = lipgloss.Color("#393e46")
 
-	searchStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("86")).
+	styleHeader = lipgloss.NewStyle().
+			Foreground(colorCyberCyan).
+			Bold(true).
+			Padding(0, 1).
+			BorderStyle(lipgloss.DoubleBorder()).
+			BorderForeground(colorCyberCyan)
+
+	styleBox = lipgloss.NewStyle().
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(colorDimGrey).
+			Padding(1)
+
+	styleStatLabel = lipgloss.NewStyle().
+			Foreground(colorGhostWhite).
 			Bold(true)
 
-	barSafeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	barAlertStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	styleStatValue = lipgloss.NewStyle().
+			Foreground(colorCyberCyan)
+
+	styleAlert = lipgloss.NewStyle().
+			Foreground(colorAlertRed).
+			Bold(true)
+
+	styleSuccess = lipgloss.NewStyle().
+			Foreground(colorSuccessGreen)
+
+	styleSearch = lipgloss.NewStyle().
+			Foreground(colorCyberCyan).
+			Italic(true)
 )
 
 type tickMsg time.Time
@@ -52,20 +69,25 @@ type model struct {
 	lastAlert   string
 	searching   bool
 	searchInput textinput.Model
-	
-	// Stats for Chart
-	history     []stats
-	current     stats
-	maxVal      int
+
+	// Dashboard Data
+	history        []stats
+	current        stats
+	maxVal         int
+	totalRequests  int
+	totalBlocks    int
+	threatTypes    map[string]int
+	startTime      time.Time
+	activeRequests int
 }
 
 func NewModel(logChan chan proxy.LogEntry) model {
 	columns := []table.Column{
 		{Title: "ID", Width: 8},
-		{Title: "Time", Width: 10},
-		{Title: "IP", Width: 16},
-		{Title: "Status", Width: 35},
-		{Title: "Path", Width: 30},
+		{Title: "TIME", Width: 10},
+		{Title: "SOURCE IP", Width: 16},
+		{Title: "SECURITY STATUS", Width: 35},
+		{Title: "REQUEST PATH", Width: 30},
 	}
 
 	t := table.New(
@@ -77,27 +99,31 @@ func NewModel(logChan chan proxy.LogEntry) model {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(colorDimGrey).
 		BorderBottom(true).
-		Bold(false)
+		Bold(true).
+		Foreground(colorCyberCyan)
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(colorGhostWhite).
+		Background(lipgloss.Color("#08d9d6")).
 		Bold(false)
 	t.SetStyles(s)
 
 	ti := textinput.New()
-	ti.Placeholder = "Search by ID, IP, Attack..."
+	ti.Placeholder = "Filter by Pattern/IP..."
 	ti.CharLimit = 50
 	ti.Width = 30
+	ti.Prompt = " 🔍 "
 
 	return model{
 		table:       t,
 		logChan:     logChan,
 		logs:        make([]proxy.LogEntry, 0),
 		searchInput: ti,
-		history:     make([]stats, 60), // Last 60 seconds
+		history:     make([]stats, 60),
 		maxVal:      10,
+		threatTypes: make(map[string]int),
+		startTime:   time.Now(),
 	}
 }
 
@@ -128,22 +154,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.table.SetHeight(m.height - 18) // Adjust for chart
+
+		// Adaptive table height - reserved space for other UI components
+		reservedHeight := 24
+		if m.width < 110 {
+			reservedHeight = 32 // More space if layout stacks vertically
+		}
+		newHeight := m.height - reservedHeight
+		if newHeight < 5 {
+			newHeight = 5
+		}
+		m.table.SetHeight(newHeight)
+
 		totalWidth := m.width - 6
+		pathWidth := totalWidth - 8 - 10 - 16 - 35 - 8
+		if pathWidth < 10 {
+			pathWidth = 10
+		}
+
 		m.table.SetColumns([]table.Column{
 			{Title: "ID", Width: 8},
-			{Title: "Time", Width: 10},
-			{Title: "IP", Width: 16},
-			{Title: "Status", Width: 35},
-			{Title: "Path", Width: totalWidth - 8 - 10 - 16 - 35 - 6},
+			{Title: "TIME", Width: 10},
+			{Title: "SOURCE IP", Width: 16},
+			{Title: "SECURITY STATUS", Width: 35},
+			{Title: "REQUEST PATH", Width: pathWidth},
 		})
 
 	case tickMsg:
-		// Move history
 		m.history = append(m.history[1:], m.current)
+		m.activeRequests = m.current.safe + m.current.alerts
 		m.current = stats{0, 0}
-		
-		// Update max for scaling
 		m.maxVal = 5
 		for _, s := range m.history {
 			if s.safe+s.alerts > m.maxVal {
@@ -181,12 +221,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case logMsg:
 		entry := proxy.LogEntry(msg)
+		m.totalRequests++
 		if entry.Alert != nil || entry.Blocked {
 			m.current.alerts++
+			m.totalBlocks++
+			if entry.Alert != nil {
+				m.threatTypes[entry.Alert.Type]++
+			}
 		} else {
 			m.current.safe++
 		}
-		
+
 		m.logs = append(m.logs, entry)
 		if len(m.logs) > 500 {
 			m.logs = m.logs[1:]
@@ -202,33 +247,131 @@ func (m *model) updateTable() {
 	query := strings.ToLower(m.searchInput.Value())
 	rows := make([]table.Row, 0)
 	for _, entry := range m.logs {
-		status := "OK"
+		status := "PASSIVE MONITORING"
 		if entry.Alert != nil {
-			status = fmt.Sprintf("!! %s !!", entry.Alert.Type)
-			m.lastAlert = fmt.Sprintf("[%s] %s attempted %s on %s", 
-				entry.Timestamp.Format("15:04:05"), entry.RemoteIP, entry.Alert.Type, entry.Path)
+			status = fmt.Sprintf("🛡️ DETECTED: %s", entry.Alert.Type)
+			m.lastAlert = fmt.Sprintf("[%s] %s -> %s (%s)",
+				entry.Timestamp.Format("15:04:05"), entry.RemoteIP, entry.Path, entry.Alert.Type)
 		}
-		if entry.Blocked { status = "BLOCKED" }
-		match := query == "" || strings.Contains(strings.ToLower(entry.ID), query) || 
-				 strings.Contains(strings.ToLower(entry.RemoteIP), query) || 
-				 strings.Contains(strings.ToLower(status), query) || 
-				 strings.Contains(strings.ToLower(entry.Path), query)
+		if entry.Blocked {
+			status = "🚫 BLOCKED (IPS)"
+		}
+		match := query == "" || strings.Contains(strings.ToLower(entry.ID), query) ||
+			strings.Contains(strings.ToLower(entry.RemoteIP), query) ||
+			strings.Contains(strings.ToLower(status), query) ||
+			strings.Contains(strings.ToLower(entry.Path), query)
 		if match {
 			rows = append(rows, table.Row{entry.ID, entry.Timestamp.Format("15:04:05"), entry.RemoteIP, status, entry.Path})
 		}
 	}
 	m.table.SetRows(rows)
-	if query == "" { m.table.GotoBottom() }
+	if query == "" {
+		m.table.GotoBottom()
+	}
 }
 
-func (m model) renderChart() string {
-	height := 5
+func (m model) renderStats() string {
+	uptime := time.Since(m.startTime).Round(time.Second)
+	
+	s1 := lipgloss.JoinVertical(lipgloss.Left,
+		styleStatLabel.Render("UPTIME"),
+		styleStatValue.Render(uptime.String()),
+	)
+	s2 := lipgloss.JoinVertical(lipgloss.Left,
+		styleStatLabel.Render("TOTAL REQUESTS"),
+		styleStatValue.Render(fmt.Sprintf("%d", m.totalRequests)),
+	)
+	s3 := lipgloss.JoinVertical(lipgloss.Left,
+		styleStatLabel.Render("IPS BLOCKS"),
+		styleAlert.Render(fmt.Sprintf("%d", m.totalBlocks)),
+	)
+	s4 := lipgloss.JoinVertical(lipgloss.Left,
+		styleStatLabel.Render("LIVE RPS"),
+		styleStatValue.Render(fmt.Sprintf("%d req/s", m.activeRequests)),
+	)
+
+	// Responsive stats boxes
+	boxWidth := (m.width - 12) / 4
+	if boxWidth < 15 { boxWidth = 15 }
+	if boxWidth > 25 { boxWidth = 25 }
+
+	row := lipgloss.JoinHorizontal(lipgloss.Top,
+		styleBox.Width(boxWidth).Render(s1),
+		styleBox.Width(boxWidth).Render(s2),
+		styleBox.Width(boxWidth).Render(s3),
+		styleBox.Width(boxWidth).Render(s4),
+	)
+
+	if m.width < 80 {
+		row = lipgloss.JoinVertical(lipgloss.Left,
+			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s1), styleBox.Width(boxWidth).Render(s2)),
+			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s3), styleBox.Width(boxWidth).Render(s4)),
+		)
+	}
+	return row
+}
+
+func (m model) renderThreatDistribution() string {
 	var b strings.Builder
-	b.WriteString("   Threats per Minute (Live Activity)\n")
+	b.WriteString(styleStatLabel.Render("THREAT DISTRIBUTION") + "\n\n")
+
+	type kv struct {
+		Key   string
+		Value int
+	}
+	var ss []kv
+	for k, v := range m.threatTypes {
+		ss = append(ss, kv{k, v})
+	}
+	sort.Slice(ss, func(i, j int) bool {
+		return ss[i].Value > ss[j].Value
+	})
+
+	if len(ss) == 0 {
+		b.WriteString(lipgloss.NewStyle().Foreground(colorDimGrey).Render("No threats detected yet."))
+	}
+
+	for i, kv := range ss {
+		if i >= 5 { break }
+		percent := 0.0
+		if m.totalBlocks > 0 {
+			percent = (float64(kv.Value) / float64(m.totalBlocks)) * 100
+		}
+		barWidth := int(percent / 10)
+		bar := lipgloss.NewStyle().Foreground(colorAlertRed).Render(strings.Repeat("█", barWidth))
+		b.WriteString(fmt.Sprintf("%-18s %s %3.0f%%\n", 
+			truncateString(kv.Key, 18), bar, percent))
+	}
+	
+	distWidth := 45
+	if m.width < 110 { distWidth = m.width - 10 }
+	return styleBox.Width(distWidth).Height(7).Render(b.String())
+}
+
+func (m model) renderActivityChart() string {
+	height := 6
+	chartWidth := 60
+	if m.width < 110 { chartWidth = m.width - 20 }
+	if chartWidth < 20 { chartWidth = 20 }
+
+	var b strings.Builder
+	b.WriteString(styleStatLabel.Render("LIVE SECURITY TRAFFIC (60s)") + "\n\n")
 	
 	for h := height; h > 0; h-- {
-		b.WriteString(fmt.Sprintf("%2d ", h*(m.maxVal/height)))
-		for _, s := range m.history {
+		// Scale max for axis
+		axisVal := 0
+		if m.maxVal > 0 {
+			axisVal = h * (m.maxVal / height)
+		}
+		b.WriteString(fmt.Sprintf("%2d ", axisVal))
+		
+		// Adjust history to fit chartWidth
+		visibleHistory := m.history
+		if len(m.history) > chartWidth {
+			visibleHistory = m.history[len(m.history)-chartWidth:]
+		}
+
+		for _, s := range visibleHistory {
 			safeH := 0
 			alertH := 0
 			if m.maxVal > 0 {
@@ -237,45 +380,73 @@ func (m model) renderChart() string {
 			}
 			
 			if h <= alertH {
-				b.WriteString(barAlertStyle.Render("█"))
+				b.WriteString(lipgloss.NewStyle().Foreground(colorAlertRed).Render("█"))
 			} else if h <= (safeH + alertH) {
-				b.WriteString(barSafeStyle.Render("█"))
+				b.WriteString(lipgloss.NewStyle().Foreground(colorSuccessGreen).Render("█"))
 			} else {
-				b.WriteString(" ")
+				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#1f2937")).Render("·"))
 			}
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("      " + strings.Repeat("-", 60) + "\n")
-	b.WriteString("      60s ago" + strings.Repeat(" ", 40) + "Now\n")
-	return b.String()
+	return styleBox.Width(chartWidth + 10).Height(7).Render(b.String())
+}
+
+func truncateString(s string, l int) string {
+	if len(s) <= l { return s }
+	if l <= 1 { return "…" }
+	return s[:l-1] + "…"
 }
 
 func (m model) View() string {
-	var s strings.Builder
-	s.WriteString(headerStyle.Render("🛡️ GUARDIAN TUI - Real-time IPS & Block Engine"))
-	s.WriteString("\n\n")
+	header := styleHeader.Render("🛡️  GUARDIAN TUI v2.0 | REAL-TIME INTRUSION PREVENTION SYSTEM")
 	
-	s.WriteString(m.renderChart())
-	s.WriteString("\n")
-	
+	var topRow string
+	if m.width >= 110 {
+		topRow = lipgloss.JoinHorizontal(lipgloss.Top, 
+			m.renderActivityChart(),
+			m.renderThreatDistribution(),
+		)
+	} else {
+		topRow = lipgloss.JoinVertical(lipgloss.Left, 
+			m.renderActivityChart(),
+			m.renderThreatDistribution(),
+		)
+	}
+
+	searchArea := ""
 	if m.searching {
-		s.WriteString(searchStyle.Render("SEARCH: ") + m.searchInput.View())
+		searchArea = styleBox.BorderForeground(colorCyberCyan).Render(m.searchInput.View())
 	} else if m.searchInput.Value() != "" {
-		s.WriteString(searchStyle.Render("FILTER ACTIVE: ") + m.searchInput.Value() + " (press esc to clear)")
+		searchArea = styleSearch.Render(" 🎯 ACTIVE FILTER: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(colorDimGrey).Render(" (esc to reset)")
 	} else {
-		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("Press / to search incident ID, IP or Attack type..."))
+		searchArea = lipgloss.NewStyle().Foreground(colorDimGrey).Render(" [/] SEARCH LOGS  [q] QUIT")
 	}
-	s.WriteString("\n")
-	s.WriteString(baseStyle.Render(m.table.View()))
-	s.WriteString("\n")
-	
+
+	statusLine := ""
 	if m.lastAlert != "" {
-		s.WriteString(alertStyle.Render("LATEST BLOCK: " + m.lastAlert))
+		statusLine = lipgloss.NewStyle().
+			Background(colorAlertRed).
+			Foreground(colorGhostWhite).
+			Bold(true).
+			Padding(0, 1).
+			Render(" 🚨 CRITICAL INCIDENT DETECTED: " + m.lastAlert + " ")
 	} else {
-		s.WriteString(okStyle.Render("SYSTEM STATUS: MONITORING - NO THREATS DETECTED"))
+		statusLine = lipgloss.NewStyle().
+			Background(colorSuccessGreen).
+			Foreground(lipgloss.Color("#000")).
+			Bold(true).
+			Padding(0, 1).
+			Render(" ✨ SYSTEM STATUS: FULL MONITORING MODE - ALL SYSTEMS NOMINAL ")
 	}
-	s.WriteString("\n\n")
-	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("q: quit | /: search | esc: clear search | arrows: scroll"))
-	return s.String()
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		"\n",
+		m.renderStats(),
+		topRow,
+		searchArea,
+		styleBox.BorderForeground(colorSlateGrey).Render(m.table.View()),
+		statusLine,
+	)
 }
