@@ -38,8 +38,10 @@ A live-scrolling feed of all security events.
 
 GuardianTUI provides efficient keyboard shortcuts for active incident investigation:
 
-- **`/` (Search Mode)**: Filter the log feed by IP address, Attack Pattern, or Path.
+- **`/` (Terminal Mode)**: Open the command bar.
+- **`search <query>`**: Filter the log feed by **ID**, **Source IP**, or **Security Status**.
 - **`themes set <name>`**: While in search mode, type this to change the dashboard's visual theme. Available themes: `cyber`, `forest`, `dracula`, `monochrome`.
+- **`modes set <name>`**: While in search mode, type this to change the operational mode. Available modes: `ips`, `ids`, `strict`.
 - **`ESC`**: Clear the active filter and return to live feed.
 - **`Arrow Keys`**: Scroll through the history of captured attacks.
 - **`Q` or `CTRL+C`**: Shutdown the proxy and exit.

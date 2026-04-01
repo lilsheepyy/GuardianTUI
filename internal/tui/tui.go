@@ -139,10 +139,10 @@ func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName strin
 	t.SetStyles(s)
 
 	ti := textinput.New()
-	ti.Placeholder = "Filter by Pattern/IP..."
+	ti.Placeholder = "Enter command (e.g. search 1.2.3.4)"
 	ti.CharLimit = 50
-	ti.Width = 30
-	ti.Prompt = " 🔍 "
+	ti.Width = 40
+	ti.Prompt = " TERMINAL > "
 
 	return model{
 		table:       t,
@@ -358,7 +358,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) updateTable() {
-	query := strings.ToLower(m.searchInput.Value())
+	rawInput := strings.TrimSpace(m.searchInput.Value())
+	query := ""
+	isSearch := false
+
+	if strings.HasPrefix(strings.ToLower(rawInput), "search ") {
+		parts := strings.SplitN(rawInput, " ", 2)
+		if len(parts) == 2 {
+			query = strings.ToLower(strings.TrimSpace(parts[1]))
+			isSearch = true
+		}
+	}
+
 	rows := make([]table.Row, 0)
 	for _, entry := range m.logs {
 		status := "PASSIVE MONITORING"
@@ -370,16 +381,18 @@ func (m *model) updateTable() {
 		if entry.Blocked {
 			status = "🚫 BLOCKED (IPS)"
 		}
-		match := query == "" || strings.Contains(strings.ToLower(entry.ID), query) ||
-			strings.Contains(strings.ToLower(entry.RemoteIP), query) ||
-			strings.Contains(strings.ToLower(status), query) ||
-			strings.Contains(strings.ToLower(entry.Path), query)
+
+		match := !isSearch || query == "" || 
+				 strings.Contains(strings.ToLower(entry.ID), query) ||
+				 strings.Contains(strings.ToLower(entry.RemoteIP), query) ||
+				 strings.Contains(strings.ToLower(status), query)
+
 		if match {
 			rows = append(rows, table.Row{entry.ID, entry.Timestamp.Format("15:04:05"), entry.RemoteIP, status, entry.Path})
 		}
 	}
 	m.table.SetRows(rows)
-	if query == "" {
+	if !isSearch {
 		m.table.GotoBottom()
 	}
 }
@@ -565,9 +578,9 @@ func (m model) View() string {
 	if m.searching {
 		searchArea = styleBox.BorderForeground(m.theme.Primary).Render(m.searchInput.View())
 	} else if m.searchInput.Value() != "" {
-		searchArea = styleSearch.Render(" 🎯 ACTIVE FILTER: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to reset)")
+		searchArea = styleSearch.Render(" 🎯 TERMINAL: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to reset)")
 	} else {
-		searchArea = lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] SEARCH | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE | [q] QUIT")
+		searchArea = lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE | [q] QUIT")
 	}
 
 	statusLine := ""
