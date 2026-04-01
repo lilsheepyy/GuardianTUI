@@ -190,7 +190,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Dynamic reserved height calculation based on component visibility
 		// Base UI (Header, Stats, Terminal, Footer, Padding) = ~12 lines
-		reservedHeight := 13
+		// + 4 lines for global padding (2 top, 2 bottom)
+		reservedHeight := 17 
 		showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
 		
 		if showCharts {
@@ -208,12 +209,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table.SetHeight(newHeight)
 
 		// Dynamic column widths based on terminal width
+		// Adjusted for global 4-char horizontal padding
 		idW, timeW, ipW, statusW := 8, 10, 16, 30
 		if m.width < 100 {
 			idW, timeW, ipW, statusW = 6, 9, 15, 20
 		}
 
-		totalWidth := m.width - 10 // Account for table borders and app padding
+		totalWidth := m.width - 14 // Account for table borders, app padding, and global padding
 		pathW := totalWidth - idW - timeW - ipW - statusW
 		if pathW < 10 {
 			pathW = 10
@@ -587,13 +589,16 @@ func (m model) View() string {
 		return "Initializing Dashboard..."
 	}
 
+	// 2 rows top/bottom, 2 columns left/right padding
+	effectiveWidth := m.width - 4
+
 	// 1. Header Section
 	headerStyle := lipgloss.NewStyle().
 		Foreground(m.theme.Primary).
 		Background(m.theme.Secondary).
 		Bold(true).
 		Padding(0, 2).
-		Width(m.width).
+		Width(effectiveWidth).
 		Align(lipgloss.Center)
 
 	modeStr := "IPS (ACTIVE)"
@@ -608,13 +613,12 @@ func (m model) View() string {
 	statsRow := m.renderStats()
 
 	// 3. Visualization Section (Charts)
-	// Hide charts entirely if vertical space is very constrained (e.g. 24 lines)
 	var vizRow string
 	showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
 	
 	if showCharts {
 		if m.width >= 110 {
-			vizRow = lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center,
+			vizRow = lipgloss.PlaceHorizontal(effectiveWidth, lipgloss.Center,
 				lipgloss.JoinHorizontal(lipgloss.Top,
 					m.renderActivityChart(),
 					lipgloss.NewStyle().Width(2).Render(" "),
@@ -622,7 +626,7 @@ func (m model) View() string {
 				),
 			)
 		} else {
-			vizRow = lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center,
+			vizRow = lipgloss.PlaceHorizontal(effectiveWidth, lipgloss.Center,
 				lipgloss.JoinVertical(lipgloss.Center,
 					m.renderActivityChart(),
 					m.renderThreatDistribution(),
@@ -637,7 +641,7 @@ func (m model) View() string {
 	termStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
 		BorderForeground(m.theme.Dim).
-		Width(m.width - 4).
+		Width(effectiveWidth).
 		Padding(0, 1)
 
 	if m.searching {
@@ -650,7 +654,7 @@ func (m model) View() string {
 		if m.width > 100 {
 			helpText = "[/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE"
 		}
-		helpStyle := lipgloss.NewStyle().Foreground(m.theme.Dim).Width(m.width - 6)
+		helpStyle := lipgloss.NewStyle().Foreground(m.theme.Dim).Width(effectiveWidth - 2)
 		cmdArea = termStyle.Render(helpStyle.Render(helpText))
 	}
 
@@ -660,7 +664,7 @@ func (m model) View() string {
 		BorderForeground(m.theme.Dim).
 		Padding(0).
 		MarginTop(1).
-		Width(m.width - 4).
+		Width(effectiveWidth).
 		Render(m.table.View())
 
 	// 6. Status/Alert Footer
@@ -668,7 +672,7 @@ func (m model) View() string {
 	footerStyle := lipgloss.NewStyle().
 		Bold(true).
 		Padding(0, 1).
-		Width(m.width)
+		Width(effectiveWidth)
 
 	footerTS := " | " + time.Now().Format("15:04:05")
 	if m.width < 60 { footerTS = "" }
@@ -677,26 +681,25 @@ func (m model) View() string {
 		statusLine = footerStyle.
 			Background(m.theme.Alert).
 			Foreground(m.theme.Text).
-			Render(" 🚨 CRITICAL: " + truncateString(m.lastAlert, m.width-35) + footerTS)
+			Render(" 🚨 CRITICAL: " + truncateString(m.lastAlert, effectiveWidth-25) + footerTS)
 	} else {
 		statusLine = footerStyle.
 			Background(m.theme.Success).
 			Foreground(lipgloss.Color("#000")).
-			Render(" ✨ MONITORING ACTIVE" + truncateString(" - ALL SYSTEMS NOMINAL", m.width-25) + footerTS)
+			Render(" ✨ MONITORING ACTIVE" + truncateString(" - ALL SYSTEMS NOMINAL", effectiveWidth-25) + footerTS)
 	}
 
-	// Final Assembly
-	return lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		"\n",
-		lipgloss.NewStyle().Padding(0, 2).Render(
-			lipgloss.JoinVertical(lipgloss.Left,
-				statsRow,
-				vizRow,
-				cmdArea,
-				tableBox,
-			),
+	// Final Assembly with global padding
+	return lipgloss.NewStyle().Padding(2, 2).Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			header,
+			"\n",
+			statsRow,
+			vizRow,
+			cmdArea,
+			tableBox,
+			"\n",
+			statusLine,
 		),
-		statusLine,
 	)
 }
