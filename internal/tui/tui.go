@@ -111,12 +111,13 @@ func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName strin
 		theme = themes["cyber"]
 	}
 
+	// Placeholder columns, will be resized on first WindowSizeMsg
 	columns := []table.Column{
-		{Title: "ID", Width: 8},
-		{Title: "TIME", Width: 10},
-		{Title: "SOURCE IP", Width: 16},
-		{Title: "SECURITY STATUS", Width: 35},
-		{Title: "REQUEST PATH", Width: 30},
+		{Title: "ID", Width: 6},
+		{Title: "TIME", Width: 9},
+		{Title: "SOURCE IP", Width: 15},
+		{Title: "SECURITY STATUS", Width: 20},
+		{Title: "REQUEST PATH", Width: 20},
 	}
 
 	t := table.New(
@@ -187,11 +188,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Adaptive table height - precisely calculated based on View structure
-		// Header(1) + Newline(1) + Stats(4) + Charts(10) + Terminal(2) + Footer(1) + Padding(2)
-		reservedHeight := 21
-		if m.width < 110 {
-			reservedHeight = 30 // Charts stack vertically
+		// Dynamic reserved height calculation based on component visibility
+		// Base UI (Header, Stats, Terminal, Footer, Padding) = ~12 lines
+		reservedHeight := 12
+		showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
+		
+		if showCharts {
+			if m.width >= 110 {
+				reservedHeight += 11 // Side-by-side charts
+			} else {
+				reservedHeight += 21 // Stacked charts
+			}
 		}
 		
 		newHeight := m.height - reservedHeight
@@ -200,18 +207,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.table.SetHeight(newHeight)
 
-		totalWidth := m.width - 8 // Account for main padding
-		pathWidth := totalWidth - 8 - 10 - 16 - 35 - 4
-		if pathWidth < 10 {
-			pathWidth = 10
+		// Dynamic column widths based on terminal width
+		idW, timeW, ipW, statusW := 8, 10, 16, 35
+		if m.width < 100 {
+			idW, timeW, ipW, statusW = 6, 9, 15, 20
+		}
+
+		totalWidth := m.width - 10 // Account for table borders and app padding
+		pathW := totalWidth - idW - timeW - ipW - statusW
+		if pathW < 10 {
+			pathW = 10
 		}
 
 		m.table.SetColumns([]table.Column{
-			{Title: "ID", Width: 8},
-			{Title: "TIME", Width: 10},
-			{Title: "SOURCE IP", Width: 16},
-			{Title: "SECURITY STATUS", Width: 35},
-			{Title: "REQUEST PATH", Width: pathWidth},
+			{Title: "ID", Width: idW},
+			{Title: "TIME", Width: timeW},
+			{Title: "SOURCE IP", Width: ipW},
+			{Title: "SECURITY STATUS", Width: statusW},
+			{Title: "REQUEST PATH", Width: pathW},
 		})
 
 	case tickMsg:
@@ -597,22 +610,28 @@ func (m model) View() string {
 	statsRow := m.renderStats()
 
 	// 3. Visualization Section (Charts)
+	// Hide charts entirely if vertical space is very constrained (e.g. 24 lines)
 	var vizRow string
-	if m.width >= 110 {
-		vizRow = lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center,
-			lipgloss.JoinHorizontal(lipgloss.Top,
-				m.renderActivityChart(),
-				lipgloss.NewStyle().Width(2).Render(" "),
-				m.renderThreatDistribution(),
-			),
-		)
-	} else {
-		vizRow = lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center,
-			lipgloss.JoinVertical(lipgloss.Center,
-				m.renderActivityChart(),
-				m.renderThreatDistribution(),
-			),
-		)
+	showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
+	
+	if showCharts {
+		if m.width >= 110 {
+			vizRow = lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center,
+				lipgloss.JoinHorizontal(lipgloss.Top,
+					m.renderActivityChart(),
+					lipgloss.NewStyle().Width(2).Render(" "),
+					m.renderThreatDistribution(),
+				),
+			)
+		} else {
+			vizRow = lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center,
+				lipgloss.JoinVertical(lipgloss.Center,
+					m.renderActivityChart(),
+					m.renderThreatDistribution(),
+				),
+			)
+		}
+		vizRow += "\n"
 	}
 
 	// 4. Command/Terminal Area
@@ -629,8 +648,12 @@ func (m model) View() string {
 		activeFilterStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Italic(true)
 		cmdArea = termStyle.Render(activeFilterStyle.Render("🎯 FILTERED: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to clear)"))
 	} else {
+		helpText := "[/] TERMINAL | [search <query>] | [themes/modes set <val>]"
+		if m.width > 100 {
+			helpText = "[/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE"
+		}
 		helpStyle := lipgloss.NewStyle().Foreground(m.theme.Dim).Width(m.width - 6)
-		cmdArea = termStyle.Render(helpStyle.Render("[/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE"))
+		cmdArea = termStyle.Render(helpStyle.Render(helpText))
 	}
 
 	// 5. Main Table Area
@@ -649,16 +672,19 @@ func (m model) View() string {
 		Padding(0, 1).
 		Width(m.width)
 
+	footerTS := " | " + time.Now().Format("15:04:05")
+	if m.width < 60 { footerTS = "" }
+
 	if m.lastAlert != "" {
 		statusLine = footerStyle.
 			Background(m.theme.Alert).
 			Foreground(m.theme.Text).
-			Render(" 🚨 CRITICAL INCIDENT: " + truncateString(m.lastAlert, m.width-35) + " | " + time.Now().Format("15:04:05"))
+			Render(" 🚨 CRITICAL: " + truncateString(m.lastAlert, m.width-25) + footerTS)
 	} else {
 		statusLine = footerStyle.
 			Background(m.theme.Success).
 			Foreground(lipgloss.Color("#000")).
-			Render(" ✨ SYSTEM STATUS: ALL SYSTEMS NOMINAL - MONITORING ACTIVE | " + time.Now().Format("15:04:05"))
+			Render(" ✨ MONITORING ACTIVE" + truncateString(" - ALL SYSTEMS NOMINAL", m.width-25) + footerTS)
 	}
 
 	// Final Assembly
