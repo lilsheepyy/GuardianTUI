@@ -101,7 +101,6 @@ type model struct {
 	totalRequests  int
 	totalBlocks    int
 	threatTypes    map[string]int
-	csamLogs       []proxy.LogEntry
 	startTime      time.Time
 	activeRequests int
 }
@@ -190,10 +189,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 		// Dynamic reserved height calculation based on component visibility
-		// Base UI (Header, Stats, CSAM Pane, Terminal, Footer, Padding) = ~18 lines
+		// Base UI (Header, Stats, Terminal, Footer, Padding) = ~12 lines
 		// + 4 lines for global padding (2 top, 2 bottom)
-		reservedHeight := 22 
-		showCharts := m.height >= 45 || (m.height >= 35 && m.width >= 110)
+		reservedHeight := 17 
+		showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
 		
 		if showCharts {
 			if m.width >= 110 {
@@ -386,12 +385,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.totalBlocks++
 			if entry.Alert != nil {
 				m.threatTypes[entry.Alert.Type]++
-				if strings.Contains(entry.Alert.Type, "CSAM") {
-					m.csamLogs = append(m.csamLogs, entry)
-					if len(m.csamLogs) > 10 {
-						m.csamLogs = m.csamLogs[1:]
-					}
-				}
 			}
 		} else {
 			m.current.safe++
@@ -591,28 +584,6 @@ func truncateString(s string, l int) string {
 	return s[:l-1] + "…"
 }
 
-func (m model) renderCSAMPane() string {
-	styleStatLabel := lipgloss.NewStyle().Foreground(m.theme.Alert).Bold(true)
-	styleBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Alert).Padding(0, 1)
-	
-	effectiveWidth := m.width - 4
-	
-	var b strings.Builder
-	b.WriteString(styleStatLabel.Render("🚨 ILLICIT CONTENT SHIELD (ZERO TOLERANCE)") + "\n")
-	
-	if len(m.csamLogs) == 0 {
-		b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Dim).Render("No illicit content detected. System clean."))
-	} else {
-		for _, entry := range m.csamLogs {
-			ts := entry.Timestamp.Format("15:04:05")
-			row := fmt.Sprintf("[%s] %s -> %s", ts, entry.RemoteIP, truncateString(entry.Alert.Pattern, effectiveWidth-30))
-			b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Alert).Render(row) + "\n")
-		}
-	}
-	
-	return styleBox.Width(effectiveWidth).Height(5).Render(b.String())
-}
-
 func (m model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Initializing Dashboard..."
@@ -643,7 +614,7 @@ func (m model) View() string {
 
 	// 3. Visualization Section (Charts)
 	var vizRow string
-	showCharts := m.height >= 45 || (m.height >= 35 && m.width >= 110)
+	showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
 	
 	if showCharts {
 		if m.width >= 110 {
@@ -665,10 +636,7 @@ func (m model) View() string {
 		vizRow += "\n"
 	}
 
-	// 4. CSAM Specific Window
-	csamPane := m.renderCSAMPane() + "\n"
-
-	// 5. Command/Terminal Area
+	// 4. Command/Terminal Area
 	var cmdArea string
 	termStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
@@ -690,7 +658,7 @@ func (m model) View() string {
 		cmdArea = termStyle.Render(helpStyle.Render(helpText))
 	}
 
-	// 6. Main Table Area
+	// 5. Main Table Area
 	tableBox := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.Dim).
@@ -699,7 +667,7 @@ func (m model) View() string {
 		Width(effectiveWidth).
 		Render(m.table.View())
 
-	// 7. Status/Alert Footer
+	// 6. Status/Alert Footer
 	var statusLine string
 	footerStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -728,7 +696,6 @@ func (m model) View() string {
 			"\n",
 			statsRow,
 			vizRow,
-			csamPane,
 			cmdArea,
 			tableBox,
 			"\n",
