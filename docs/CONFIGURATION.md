@@ -9,6 +9,10 @@ GuardianTUI is highly configurable via `config.yaml` and `ai.json`. This guide p
 The main configuration file controls the intensity and reach of the security engine.
 
 ### Engine Configuration
+- `mode`: The operational behavior of the proxy. Options:
+    - `ips` (Default): Active mitigation. Blocks malicious requests.
+    - `ids`: Passive monitoring. Logs detections but does not block traffic.
+    - `strict`: Aggressive defense. Challenges all GET requests with PoW and enforces strict header policies.
 - `max_scan_size_bytes`: Maximum size of the request body to scan. (Default: 1MB).
 - `probing_window_seconds`: Time window (in seconds) used to track the behavioral history of an IP.
 - `probing_threshold_unique`: The number of unique attack types (e.g., SQLi + XSS) an IP can attempt before being automatically blocked as a "Probing Bot".

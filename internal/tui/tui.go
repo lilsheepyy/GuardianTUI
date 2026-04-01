@@ -84,6 +84,7 @@ type model struct {
 	table       table.Model
 	logs        []proxy.LogEntry
 	logChan     chan proxy.LogEntry
+	engine      *proxy.Engine
 	width       int
 	height      int
 	lastAlert   string
@@ -104,7 +105,7 @@ type model struct {
 	activeRequests int
 }
 
-func NewModel(logChan chan proxy.LogEntry, themeName string) model {
+func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName string) model {
 	theme, ok := themes[strings.ToLower(themeName)]
 	if !ok {
 		theme = themes["cyber"]
@@ -146,6 +147,7 @@ func NewModel(logChan chan proxy.LogEntry, themeName string) model {
 	return model{
 		table:       t,
 		logChan:     logChan,
+		engine:      engine,
 		logs:        make([]proxy.LogEntry, 0),
 		searchInput: ti,
 		history:     make([]stats, 60),
@@ -235,6 +237,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.suggIdx = (m.suggIdx + 1) % len(themeList)
 					m.searchInput.SetValue("themes set " + themeList[m.suggIdx])
 					m.searchInput.SetCursor(len(m.searchInput.Value()))
+				} else if strings.HasPrefix("modes set ", val) && !strings.HasPrefix(val, "modes set ") {
+					m.searchInput.SetValue("modes set ")
+					m.searchInput.SetCursor(len("modes set "))
+				} else if strings.HasPrefix(val, "modes set ") {
+					modeList := []string{"ips", "ids", "strict"}
+					m.suggIdx = (m.suggIdx + 1) % len(modeList)
+					m.searchInput.SetValue("modes set " + modeList[m.suggIdx])
+					m.searchInput.SetCursor(len(m.searchInput.Value()))
 				}
 				return m, nil
 			case "enter":
@@ -258,6 +268,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								Background(m.theme.Accent).
 								Bold(false)
 							m.table.SetStyles(s)
+						}
+					}
+					m.searchInput.SetValue("")
+					m.searching = false
+					m.searchInput.Blur()
+					m.updateTable()
+					return m, nil
+				} else if strings.HasPrefix(strings.ToLower(val), "modes set ") {
+					parts := strings.Split(val, " ")
+					if len(parts) >= 3 {
+						newMode := strings.ToLower(parts[2])
+						if newMode == "ips" || newMode == "ids" || newMode == "strict" {
+							if m.engine != nil {
+								m.engine.Mode = newMode
+								// If strict and PoW is not initialized, initialize it
+								if newMode == "strict" && m.engine.PoW == nil {
+									difficulty := 4
+									if m.engine.Config != nil && m.engine.Config.Engine.PoWDifficulty > 0 {
+										difficulty = m.engine.Config.Engine.PoWDifficulty
+									}
+									// Lazy init PoW
+									// Note: pow.NewSystem might need a proper key if it was using one, 
+									// but here we use empty string as default.
+									m.engine.PoW = proxy.NewPoWSystem(difficulty, "")
+								}
+							}
 						}
 					}
 					m.searchInput.SetValue("")
@@ -505,7 +541,12 @@ func (m model) View() string {
 			Foreground(m.theme.Primary).
 			Italic(true)
 
-	header := styleHeader.Render(fmt.Sprintf("🛡️  GUARDIAN TUI v2.0 | REAL-TIME INTRUSION PREVENTION SYSTEM | THEME: %s", strings.ToUpper(m.theme.Name)))
+	modeStr := "IPS"
+	if m.engine != nil {
+		modeStr = strings.ToUpper(m.engine.Mode)
+	}
+
+	header := styleHeader.Render(fmt.Sprintf("🛡️  GUARDIAN TUI v2.0 | MODE: %s | THEME: %s", modeStr, strings.ToUpper(m.theme.Name)))
 	
 	var topRow string
 	if m.width >= 110 {
@@ -526,7 +567,7 @@ func (m model) View() string {
 	} else if m.searchInput.Value() != "" {
 		searchArea = styleSearch.Render(" 🎯 ACTIVE FILTER: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to reset)")
 	} else {
-		searchArea = lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] SEARCH LOGS | [themes set <name>] | [tab] AUTOCOMPLETE | [q] QUIT")
+		searchArea = lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] SEARCH | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE | [q] QUIT")
 	}
 
 	statusLine := ""

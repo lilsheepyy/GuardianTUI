@@ -127,6 +127,7 @@ type Engine struct {
 	LogChan         chan LogEntry
 	Config          *Config
 	PoW             *pow.System
+	Mode            string // ids, ips, strict
 	mu              sync.RWMutex
 }
 
@@ -139,12 +140,18 @@ func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, erro
 		powSys = pow.NewSystem(cfg.Engine.PoWDifficulty, "")
 	}
 
+	mode := "ips"
+	if cfg != nil && cfg.Engine.Mode != "" {
+		mode = strings.ToLower(cfg.Engine.Mode)
+	}
+
 	e := &Engine{
 		TargetURL:  u,
 		BlockedIPs: NewShardedIPMap(),
 		LogChan:    logChan,
 		Config:     cfg,
 		PoW:        powSys,
+		Mode:       mode,
 	}
 
 	e.BlocklistPtr.Store(&BlocklistSnapshot{
@@ -384,20 +391,39 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ua := r.UserAgent()
 		for _, blockedUA := range e.Config.BlockedUserAgents {
 			if strings.Contains(ua, blockedUA) {
-				e.serveBlockPage(w, incidentID, remoteIPStr, r, &scanner.Detection{Type: "Blocked User-Agent", Pattern: blockedUA, Level: scanner.LevelCritical}, false)
-				return
+				detection := &scanner.Detection{Type: "Blocked User-Agent", Pattern: blockedUA, Level: scanner.LevelCritical}
+				if e.Mode == "ids" {
+					e.LogChan <- LogEntry{
+						ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: ua, Alert: detection, FullHeaders: r.Header,
+					}
+				} else {
+					e.serveBlockPage(w, incidentID, remoteIPStr, r, detection, false)
+					return
+				}
 			}
 		}
 	}
 
 	// Check IP blocklist (manual blocks and subnets)
 	if _, blocked := e.BlockedIPs.Load(remoteIPStr); blocked {
-		e.serveBlockPage(w, incidentID, remoteIPStr, r, nil, true)
-		return
+		if e.Mode == "ids" {
+			e.LogChan <- LogEntry{
+				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Status: 200, Blocked: true, Alert: &scanner.Detection{Type: "IP Blocked (IDS Mode)", Level: scanner.LevelCritical}, FullHeaders: r.Header,
+			}
+		} else {
+			e.serveBlockPage(w, incidentID, remoteIPStr, r, nil, true)
+			return
+		}
 	}
 	if e.IsIPBlockedBySubnet(parsedIP, remoteIPStr) {
-		e.serveBlockPage(w, incidentID, remoteIPStr, r, &scanner.Detection{Type: "IP Blocklist", Level: scanner.LevelCritical}, false)
-		return
+		if e.Mode == "ids" {
+			e.LogChan <- LogEntry{
+				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Status: 200, Blocked: true, Alert: &scanner.Detection{Type: "IP Blocklist (IDS Mode)", Level: scanner.LevelCritical}, FullHeaders: r.Header,
+			}
+		} else {
+			e.serveBlockPage(w, incidentID, remoteIPStr, r, &scanner.Detection{Type: "IP Blocklist", Level: scanner.LevelCritical}, false)
+			return
+		}
 	}
 
 	var bodyCaptured string
@@ -413,8 +439,14 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// --- DLP: Request Path Shield ---
 	if dlpDetection := dlp.AnalyzeRequest(decodedPath); dlpDetection != nil {
-		e.serveBlockPage(w, incidentID, remoteIPStr, r, dlpDetection, false)
-		return
+		if e.Mode == "ids" {
+			e.LogChan <- LogEntry{
+				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Alert: dlpDetection, FullHeaders: r.Header,
+			}
+		} else {
+			e.serveBlockPage(w, incidentID, remoteIPStr, r, dlpDetection, false)
+			return
+		}
 	}
 
 	// Extract Cookies for granular scanning
@@ -455,14 +487,25 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if detection != nil {
-		e.serveBlockPage(w, incidentID, remoteIPStr, r, detection, false)
-		return
+		if e.Mode == "ids" {
+			e.LogChan <- LogEntry{
+				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Alert: detection, FullHeaders: r.Header,
+			}
+		} else {
+			e.serveBlockPage(w, incidentID, remoteIPStr, r, detection, false)
+			return
+		}
 	}
 
 	// Transparent PoW Challenge Handling (Only for requests that passed the security scan)
-	if e.PoW != nil && e.Config.Engine.PoWEnabled {
-		// Only challenge GET requests (to avoid breaking APIs) and only if not whitelisted
-		if r.Method == "GET" && !strings.Contains(r.Header.Get("Accept"), "application/json") {
+	if e.PoW != nil && (e.Config.Engine.PoWEnabled || e.Mode == "strict") {
+		// In Strict mode, we are less lenient with Content-Type checks
+		shouldChallenge := r.Method == "GET" && !strings.Contains(r.Header.Get("Accept"), "application/json")
+		if e.Mode == "strict" {
+			shouldChallenge = r.Method == "GET" // Challenge all GETs in strict mode
+		}
+
+		if shouldChallenge {
 			powCookie, err := r.Cookie("gtui_pow")
 			powVerified := false
 			
@@ -480,6 +523,10 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !powVerified {
 				// Send invisible JS challenge
 				challenge := e.PoW.GenerateChallenge(remoteIPStr)
+				// Increase difficulty dynamically in strict mode if needed, 
+				// but currently difficulty is set at system creation.
+				// We could re-initialize PoW system or just use the high difficulty.
+				
 				html := e.PoW.JSInjector(challenge)
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Header().Set("Cache-Control", "no-store, max-age=0")
@@ -593,3 +640,7 @@ func (e *Engine) modifyResponse(res *http.Response) error {
 }
 func (e *Engine) Block(ip string) { e.BlockedIPs.Store(ip, true) }
 func (e *Engine) Unblock(ip string) { e.BlockedIPs.Delete(ip) }
+
+func NewPoWSystem(difficulty int, key string) *pow.System {
+	return pow.NewSystem(difficulty, key)
+}

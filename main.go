@@ -148,7 +148,7 @@ func main() {
 		if cfg != nil && cfg.TUI.Theme != "" {
 			themeName = cfg.TUI.Theme
 		}
-		p := tea.NewProgram(tui.NewModel(tuiChan, themeName), tea.WithAltScreen())
+		p := tea.NewProgram(tui.NewModel(tuiChan, engine, themeName), tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			fmt.Printf("Error starting TUI: %v\n", err)
 			os.Exit(1)

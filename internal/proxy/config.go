@@ -13,12 +13,13 @@ type AIConfig struct {
 }
 
 type EngineConfig struct {
-	MaxScanSize      int  `yaml:"max_scan_size_bytes"`
-	ProbingWindow    int  `yaml:"probing_window_seconds"`
-	ProbingThreshold int  `yaml:"probing_threshold_unique"`
-	SpamThreshold    int  `yaml:"spam_threshold_total"`
-	PoWEnabled       bool `yaml:"pow_enabled"`
-	PoWDifficulty    int  `yaml:"pow_difficulty"`
+	Mode             string `yaml:"mode"` // ips, ids, strict
+	MaxScanSize      int    `yaml:"max_scan_size_bytes"`
+	ProbingWindow    int    `yaml:"probing_window_seconds"`
+	ProbingThreshold int    `yaml:"probing_threshold_unique"`
+	SpamThreshold    int    `yaml:"spam_threshold_total"`
+	PoWEnabled       bool   `yaml:"pow_enabled"`
+	PoWDifficulty    int    `yaml:"pow_difficulty"`
 }
 
 type TUIConfig struct {
@@ -70,6 +71,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	
 	// Set defaults for missing values
+	if cfg.Engine.Mode == "" { cfg.Engine.Mode = "ips" }
 	if cfg.Engine.MaxScanSize == 0 { cfg.Engine.MaxScanSize = 1024 * 1024 }
 	if cfg.Engine.ProbingWindow == 0 { cfg.Engine.ProbingWindow = 60 }
 	if cfg.AIProtection.ScoreThreshold == 0 { cfg.AIProtection.ScoreThreshold = 5 }
