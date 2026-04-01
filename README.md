@@ -111,6 +111,14 @@ engine:
 ai_protection:
   endpoints: ["/v1/chat", "/api"]    # Endpoints requiring AI heuristics
   score_threshold: 5                 # Stricter if lower (default 5)
+  protect_pii: true                  # Block Credit Cards/SSNs in prompts
+  blocked_keywords:                  # Instant block for these words
+    - "internal_key"
+    - "admin_password"
+
+whitelist:
+  - "127.0.0.1"                      # Your own IP to avoid self-blocking
+  - "192.168.1.0/24"                 # Trusted local network
 ```
 
 ---
