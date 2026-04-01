@@ -44,6 +44,7 @@ Your application is now filtered and accessible via `http://localhost:8080`.
 - **Advanced AI Shield**: Heuristic scoring specifically optimized for LLM/AI endpoints.
 - **DLP Engine**: Inbound file protection and outbound secret redaction.
 - **v2.0 Dashboard**: Modern, responsive TUI with traffic heatmaps and threat distribution charts.
+- **Custom TUI Themes**: Multiple visual styles (Cyber, Forest, Dracula, Monochrome) selectable via configuration or TUI command.
 
 ---
 

@@ -13,45 +13,65 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	// Modern Cyber Palette
-	colorCyberCyan    = lipgloss.Color("#00f2ff")
-	colorAlertRed     = lipgloss.Color("#ff2e63")
-	colorSuccessGreen = lipgloss.Color("#08ffc8")
-	colorGhostWhite   = lipgloss.Color("#eaeaea")
-	colorSlateGrey    = lipgloss.Color("#252a34")
-	colorDimGrey      = lipgloss.Color("#393e46")
+// Theme defines the color palette for the TUI
+type Theme struct {
+	Name         string
+	Primary      lipgloss.Color
+	Secondary    lipgloss.Color
+	Accent       lipgloss.Color
+	Alert        lipgloss.Color
+	Success      lipgloss.Color
+	Text         lipgloss.Color
+	Dim          lipgloss.Color
+	Background   lipgloss.Color
+}
 
-	styleHeader = lipgloss.NewStyle().
-			Foreground(colorCyberCyan).
-			Bold(true).
-			Padding(0, 1).
-			BorderStyle(lipgloss.DoubleBorder()).
-			BorderForeground(colorCyberCyan)
-
-	styleBox = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(colorDimGrey).
-			Padding(1)
-
-	styleStatLabel = lipgloss.NewStyle().
-			Foreground(colorGhostWhite).
-			Bold(true)
-
-	styleStatValue = lipgloss.NewStyle().
-			Foreground(colorCyberCyan)
-
-	styleAlert = lipgloss.NewStyle().
-			Foreground(colorAlertRed).
-			Bold(true)
-
-	styleSuccess = lipgloss.NewStyle().
-			Foreground(colorSuccessGreen)
-
-	styleSearch = lipgloss.NewStyle().
-			Foreground(colorCyberCyan).
-			Italic(true)
-)
+var themes = map[string]Theme{
+	"cyber": {
+		Name:      "Cyber",
+		Primary:   lipgloss.Color("#00f2ff"),
+		Secondary: lipgloss.Color("#252a34"),
+		Accent:    lipgloss.Color("#08d9d6"),
+		Alert:     lipgloss.Color("#ff2e63"),
+		Success:   lipgloss.Color("#08ffc8"),
+		Text:      lipgloss.Color("#eaeaea"),
+		Dim:       lipgloss.Color("#393e46"),
+		Background: lipgloss.Color("#1a1a1a"),
+	},
+	"forest": {
+		Name:      "Forest",
+		Primary:   lipgloss.Color("#a2d076"),
+		Secondary: lipgloss.Color("#2d3319"),
+		Accent:    lipgloss.Color("#6fb98f"),
+		Alert:     lipgloss.Color("#e27d60"),
+		Success:   lipgloss.Color("#85cdca"),
+		Text:      lipgloss.Color("#f1f1f1"),
+		Dim:       lipgloss.Color("#4d5d53"),
+		Background: lipgloss.Color("#1e241e"),
+	},
+	"dracula": {
+		Name:      "Dracula",
+		Primary:   lipgloss.Color("#bd93f9"),
+		Secondary: lipgloss.Color("#282a36"),
+		Accent:    lipgloss.Color("#ff79c6"),
+		Alert:     lipgloss.Color("#ff5555"),
+		Success:   lipgloss.Color("#50fa7b"),
+		Text:      lipgloss.Color("#f8f8f2"),
+		Dim:       lipgloss.Color("#6272a4"),
+		Background: lipgloss.Color("#282a36"),
+	},
+	"monochrome": {
+		Name:      "Monochrome",
+		Primary:   lipgloss.Color("#ffffff"),
+		Secondary: lipgloss.Color("#111111"),
+		Accent:    lipgloss.Color("#aaaaaa"),
+		Alert:     lipgloss.Color("#cccccc"),
+		Success:   lipgloss.Color("#eeeeee"),
+		Text:      lipgloss.Color("#ffffff"),
+		Dim:       lipgloss.Color("#333333"),
+		Background: lipgloss.Color("#000000"),
+	},
+}
 
 type tickMsg time.Time
 
@@ -69,6 +89,7 @@ type model struct {
 	lastAlert   string
 	searching   bool
 	searchInput textinput.Model
+	theme       Theme
 
 	// Dashboard Data
 	history        []stats
@@ -81,7 +102,12 @@ type model struct {
 	activeRequests int
 }
 
-func NewModel(logChan chan proxy.LogEntry) model {
+func NewModel(logChan chan proxy.LogEntry, themeName string) model {
+	theme, ok := themes[strings.ToLower(themeName)]
+	if !ok {
+		theme = themes["cyber"]
+	}
+
 	columns := []table.Column{
 		{Title: "ID", Width: 8},
 		{Title: "TIME", Width: 10},
@@ -99,13 +125,13 @@ func NewModel(logChan chan proxy.LogEntry) model {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(colorDimGrey).
+		BorderForeground(theme.Dim).
 		BorderBottom(true).
 		Bold(true).
-		Foreground(colorCyberCyan)
+		Foreground(theme.Primary)
 	s.Selected = s.Selected.
-		Foreground(colorGhostWhite).
-		Background(lipgloss.Color("#08d9d6")).
+		Foreground(theme.Text).
+		Background(theme.Accent).
 		Bold(false)
 	t.SetStyles(s)
 
@@ -124,6 +150,7 @@ func NewModel(logChan chan proxy.LogEntry) model {
 		maxVal:      10,
 		threatTypes: make(map[string]int),
 		startTime:   time.Now(),
+		theme:       theme,
 	}
 }
 
@@ -195,7 +222,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.searching {
 			switch msg.String() {
-			case "enter", "esc":
+			case "enter":
+				val := m.searchInput.Value()
+				if strings.HasPrefix(strings.ToLower(val), "themes set ") {
+					parts := strings.Split(val, " ")
+					if len(parts) >= 3 {
+						newThemeName := strings.ToLower(parts[2])
+						if newTheme, ok := themes[newThemeName]; ok {
+							m.theme = newTheme
+							// Re-apply styles to the table as it's a sub-component
+							s := m.table.Styles()
+							s.Header = s.Header.BorderForeground(m.theme.Dim).Foreground(m.theme.Primary)
+							s.Selected = s.Selected.Foreground(m.theme.Text).Background(m.theme.Accent)
+							m.table.SetStyles(s)
+						}
+					}
+					m.searchInput.SetValue("")
+					m.searching = false
+					m.searchInput.Blur()
+					m.updateTable()
+					return m, nil
+				}
+				m.searching = false
+				m.searchInput.Blur()
+				m.updateTable()
+				return m, nil
+			case "esc":
 				m.searching = false
 				m.searchInput.Blur()
 				m.updateTable()
@@ -271,6 +323,11 @@ func (m *model) updateTable() {
 }
 
 func (m model) renderStats() string {
+	styleBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
+	styleStatLabel := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
+	styleStatValue := lipgloss.NewStyle().Foreground(m.theme.Primary)
+	styleAlert := lipgloss.NewStyle().Foreground(m.theme.Alert).Bold(true)
+
 	uptime := time.Since(m.startTime).Round(time.Second)
 	
 	s1 := lipgloss.JoinVertical(lipgloss.Left,
@@ -312,6 +369,10 @@ func (m model) renderStats() string {
 }
 
 func (m model) renderThreatDistribution() string {
+	styleStatLabel := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
+	styleBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
+	styleAlert := lipgloss.NewStyle().Foreground(m.theme.Alert).Bold(true)
+
 	var b strings.Builder
 	b.WriteString(styleStatLabel.Render("THREAT DISTRIBUTION") + "\n\n")
 
@@ -328,7 +389,7 @@ func (m model) renderThreatDistribution() string {
 	})
 
 	if len(ss) == 0 {
-		b.WriteString(lipgloss.NewStyle().Foreground(colorDimGrey).Render("No threats detected yet."))
+		b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Dim).Render("No threats detected yet."))
 	}
 
 	for i, kv := range ss {
@@ -338,7 +399,7 @@ func (m model) renderThreatDistribution() string {
 			percent = (float64(kv.Value) / float64(m.totalBlocks)) * 100
 		}
 		barWidth := int(percent / 10)
-		bar := lipgloss.NewStyle().Foreground(colorAlertRed).Render(strings.Repeat("█", barWidth))
+		bar := styleAlert.Render(strings.Repeat("█", barWidth))
 		b.WriteString(fmt.Sprintf("%-18s %s %3.0f%%\n", 
 			truncateString(kv.Key, 18), bar, percent))
 	}
@@ -349,6 +410,9 @@ func (m model) renderThreatDistribution() string {
 }
 
 func (m model) renderActivityChart() string {
+	styleStatLabel := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
+	styleBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
+
 	height := 6
 	chartWidth := 60
 	if m.width < 110 { chartWidth = m.width - 20 }
@@ -380,11 +444,11 @@ func (m model) renderActivityChart() string {
 			}
 			
 			if h <= alertH {
-				b.WriteString(lipgloss.NewStyle().Foreground(colorAlertRed).Render("█"))
+				b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Alert).Render("█"))
 			} else if h <= (safeH + alertH) {
-				b.WriteString(lipgloss.NewStyle().Foreground(colorSuccessGreen).Render("█"))
+				b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Success).Render("█"))
 			} else {
-				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#1f2937")).Render("·"))
+				b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Dim).Render("·"))
 			}
 		}
 		b.WriteString("\n")
@@ -399,7 +463,23 @@ func truncateString(s string, l int) string {
 }
 
 func (m model) View() string {
-	header := styleHeader.Render("🛡️  GUARDIAN TUI v2.0 | REAL-TIME INTRUSION PREVENTION SYSTEM")
+	styleHeader := lipgloss.NewStyle().
+			Foreground(m.theme.Primary).
+			Bold(true).
+			Padding(0, 1).
+			BorderStyle(lipgloss.DoubleBorder()).
+			BorderForeground(m.theme.Primary)
+
+	styleBox := lipgloss.NewStyle().
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(m.theme.Dim).
+			Padding(1)
+
+	styleSearch := lipgloss.NewStyle().
+			Foreground(m.theme.Primary).
+			Italic(true)
+
+	header := styleHeader.Render(fmt.Sprintf("🛡️  GUARDIAN TUI v2.0 | REAL-TIME INTRUSION PREVENTION SYSTEM | THEME: %s", strings.ToUpper(m.theme.Name)))
 	
 	var topRow string
 	if m.width >= 110 {
@@ -416,24 +496,24 @@ func (m model) View() string {
 
 	searchArea := ""
 	if m.searching {
-		searchArea = styleBox.BorderForeground(colorCyberCyan).Render(m.searchInput.View())
+		searchArea = styleBox.BorderForeground(m.theme.Primary).Render(m.searchInput.View())
 	} else if m.searchInput.Value() != "" {
-		searchArea = styleSearch.Render(" 🎯 ACTIVE FILTER: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(colorDimGrey).Render(" (esc to reset)")
+		searchArea = styleSearch.Render(" 🎯 ACTIVE FILTER: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to reset)")
 	} else {
-		searchArea = lipgloss.NewStyle().Foreground(colorDimGrey).Render(" [/] SEARCH LOGS  [q] QUIT")
+		searchArea = lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] SEARCH LOGS  [q] QUIT")
 	}
 
 	statusLine := ""
 	if m.lastAlert != "" {
 		statusLine = lipgloss.NewStyle().
-			Background(colorAlertRed).
-			Foreground(colorGhostWhite).
+			Background(m.theme.Alert).
+			Foreground(m.theme.Text).
 			Bold(true).
 			Padding(0, 1).
 			Render(" 🚨 CRITICAL INCIDENT DETECTED: " + m.lastAlert + " ")
 	} else {
 		statusLine = lipgloss.NewStyle().
-			Background(colorSuccessGreen).
+			Background(m.theme.Success).
 			Foreground(lipgloss.Color("#000")).
 			Bold(true).
 			Padding(0, 1).
@@ -446,7 +526,7 @@ func (m model) View() string {
 		m.renderStats(),
 		topRow,
 		searchArea,
-		styleBox.BorderForeground(colorSlateGrey).Render(m.table.View()),
+		styleBox.BorderForeground(m.theme.Secondary).Render(m.table.View()),
 		statusLine,
 	)
 }

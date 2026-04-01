@@ -21,6 +21,10 @@ type EngineConfig struct {
 	PoWDifficulty    int  `yaml:"pow_difficulty"`
 }
 
+type TUIConfig struct {
+	Theme string `yaml:"theme"`
+}
+
 type Config struct {
 	Whitelist         []string     `yaml:"whitelist"`
 	BlockedUserAgents []string     `yaml:"blocked_user_agents"`
@@ -28,6 +32,7 @@ type Config struct {
 	RemoteBlocklists  []string     `yaml:"remote_blocklists"`
 	AIProtection      AIConfig     `yaml:"ai_protection"`
 	Engine            EngineConfig `yaml:"engine"`
+	TUI               TUIConfig    `yaml:"tui"`
 	
 	// Anonymous Telemetry (Heartbeat)
 	TelemetryEnabled *bool `yaml:"telemetry_enabled,omitempty"`

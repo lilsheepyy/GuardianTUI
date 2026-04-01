@@ -39,9 +39,31 @@ A live-scrolling feed of all security events.
 GuardianTUI provides efficient keyboard shortcuts for active incident investigation:
 
 - **`/` (Search Mode)**: Filter the log feed by IP address, Attack Pattern, or Path.
+- **`themes set <name>`**: While in search mode, type this to change the dashboard's visual theme. Available themes: `cyber`, `forest`, `dracula`, `monochrome`.
 - **`ESC`**: Clear the active filter and return to live feed.
 - **`Arrow Keys`**: Scroll through the history of captured attacks.
 - **`Q` or `CTRL+C`**: Shutdown the proxy and exit.
+
+---
+
+## 🎨 Visual Themes
+
+GuardianTUI supports multiple visual themes to suit your preference:
+
+| Theme | Primary Colors | Vibe |
+|-------|----------------|------|
+| `cyber` (Default) | Cyan, Red, Emerald | High-tech security dashboard |
+| `forest` | Green, Brown, Teal | Nature-inspired, easier on the eyes |
+| `dracula` | Purple, Pink, Green | Classic dark mode developer palette |
+| `monochrome` | White, Greys | Minimalist, high-contrast |
+
+### Changing Themes
+You can set the default theme in `config.yaml`:
+```yaml
+tui:
+  theme: "dracula"
+```
+Or change it dynamically within the TUI by pressing `/` and typing `themes set dracula`.
 
 ---
 
