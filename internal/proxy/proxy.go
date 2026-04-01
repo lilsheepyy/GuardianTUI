@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +50,60 @@ const blockPageTmpl = `
 </html>
 `
 
+const ShardCount = 64
+
+type ShardedIPMap struct {
+	shards [ShardCount]*ipMapShard
+}
+
+type ipMapShard struct {
+	mu sync.RWMutex
+	m  map[string]bool
+}
+
+func NewShardedIPMap() *ShardedIPMap {
+	sm := &ShardedIPMap{}
+	for i := 0; i < ShardCount; i++ {
+		sm.shards[i] = &ipMapShard{m: make(map[string]bool)}
+	}
+	return sm
+}
+
+func (sm *ShardedIPMap) getShard(ip string) *ipMapShard {
+	var hash uint32
+	for i := 0; i < len(ip); i++ {
+		hash = 31*hash + uint32(ip[i])
+	}
+	return sm.shards[hash%ShardCount]
+}
+
+func (sm *ShardedIPMap) Store(ip string, val bool) {
+	shard := sm.getShard(ip)
+	shard.mu.Lock()
+	shard.m[ip] = val
+	shard.mu.Unlock()
+}
+
+func (sm *ShardedIPMap) Load(ip string) (bool, bool) {
+	shard := sm.getShard(ip)
+	shard.mu.RLock()
+	val, ok := shard.m[ip]
+	shard.mu.RUnlock()
+	return val, ok
+}
+
+func (sm *ShardedIPMap) Delete(ip string) {
+	shard := sm.getShard(ip)
+	shard.mu.Lock()
+	delete(shard.m, ip)
+	shard.mu.Unlock()
+}
+
+type BlocklistSnapshot struct {
+	Subnets  []*net.IPNet
+	ExactIPs map[string]bool
+}
+
 type LogEntry struct {
 	ID          string
 	Timestamp   time.Time
@@ -66,9 +121,8 @@ type LogEntry struct {
 type Engine struct {
 	TargetURL       *url.URL
 	Proxy           *httputil.ReverseProxy
-	BlockedIPs      sync.Map
-	BlockedSubnets  []*net.IPNet
-	BlockedExactIPs map[string]bool
+	BlockedIPs      *ShardedIPMap
+	BlocklistPtr    atomic.Pointer[BlocklistSnapshot]
 	Whitelist       []*net.IPNet
 	LogChan         chan LogEntry
 	Config          *Config
@@ -86,11 +140,18 @@ func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, erro
 	}
 
 	e := &Engine{
-		TargetURL: u,
-		LogChan:   logChan,
-		Config:    cfg,
-		PoW:       powSys,
+		TargetURL:  u,
+		BlockedIPs: NewShardedIPMap(),
+		LogChan:    logChan,
+		Config:     cfg,
+		PoW:        powSys,
 	}
+
+	e.BlocklistPtr.Store(&BlocklistSnapshot{
+		Subnets:  make([]*net.IPNet, 0),
+		ExactIPs: make(map[string]bool),
+	})
+
 	e.Proxy = httputil.NewSingleHostReverseProxy(u)
 	originalDirector := e.Proxy.Director
 	e.Proxy.Director = func(req *http.Request) {
@@ -103,10 +164,9 @@ func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, erro
 	return e, nil
 }
 
-func (e *Engine) IsWhitelisted(ipStr string) bool {
+func (e *Engine) IsWhitelisted(ip net.IP) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	ip := net.ParseIP(ipStr)
 	if ip == nil { return false }
 	for _, subnet := range e.Whitelist {
 		if subnet.Contains(ip) { return true }
@@ -134,11 +194,20 @@ func (e *Engine) AddWhitelist(cidr string) error {
 }
 
 func (e *Engine) AddBlockedSubnet(cidr string) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	subnet, err := e.parseCIDR(cidr)
 	if err != nil { return err }
-	e.BlockedSubnets = append(e.BlockedSubnets, subnet)
+	
+	current := e.BlocklistPtr.Load()
+	newSubnets := append(append([]*net.IPNet(nil), current.Subnets...), subnet)
+	newExactIPs := make(map[string]bool)
+	for k, v := range current.ExactIPs {
+		newExactIPs[k] = v
+	}
+	
+	e.BlocklistPtr.Store(&BlocklistSnapshot{
+		Subnets:  newSubnets,
+		ExactIPs: newExactIPs,
+	})
 	return nil
 }
 
@@ -226,10 +295,10 @@ func (e *Engine) UpdateBlocklists() {
 	}
 
 	// 3. Atomically swap the active subnets and exact IPs
-	e.mu.Lock()
-	e.BlockedSubnets = allSubnets
-	e.BlockedExactIPs = allExactIPs
-	e.mu.Unlock()
+	e.BlocklistPtr.Store(&BlocklistSnapshot{
+		Subnets:  allSubnets,
+		ExactIPs: allExactIPs,
+	})
 }
 
 func (e *Engine) LoadBlocklist(path string) error {
@@ -250,41 +319,47 @@ func (e *Engine) FetchRemoteBlocklist(url string) error {
 
 func (e *Engine) ParseBlocklist(data string) error {
 	_, subnets, exactIPs := e.sanitizer(data)
-	e.mu.Lock()
-	e.BlockedSubnets = append(e.BlockedSubnets, subnets...)
-	if e.BlockedExactIPs == nil {
-		e.BlockedExactIPs = make(map[string]bool)
+	
+	current := e.BlocklistPtr.Load()
+	newSubnets := append(append([]*net.IPNet(nil), current.Subnets...), subnets...)
+	
+	newExactIPs := make(map[string]bool)
+	for k, v := range current.ExactIPs {
+		newExactIPs[k] = v
 	}
 	for ip := range exactIPs {
-		e.BlockedExactIPs[ip] = true
+		newExactIPs[ip] = true
 	}
-	e.mu.Unlock()
+	
+	e.BlocklistPtr.Store(&BlocklistSnapshot{
+		Subnets:  newSubnets,
+		ExactIPs: newExactIPs,
+	})
 	return nil
 }
 
-func (e *Engine) IsIPBlockedBySubnet(ipStr string) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	ip := net.ParseIP(ipStr)
+func (e *Engine) IsIPBlockedBySubnet(ip net.IP, parsedStr string) bool {
 	if ip == nil { return false }
-	parsedStr := ip.String()
 
-	// O(1) lookup for exact IPs
-	if e.BlockedExactIPs != nil && e.BlockedExactIPs[parsedStr] {
+	snapshot := e.BlocklistPtr.Load()
+
+	// O(1) lookup for exact IPs without locks
+	if snapshot.ExactIPs != nil && snapshot.ExactIPs[parsedStr] {
 		return true
 	}
 
-	// O(N) lookup for subnets
-	for _, subnet := range e.BlockedSubnets {
+	// O(N) lookup for subnets without locks
+	for _, subnet := range snapshot.Subnets {
 		if subnet.Contains(ip) { return true }
 	}
 	return false
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil { remoteIP = r.RemoteAddr }
+	remoteIPStr, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil { remoteIPStr = r.RemoteAddr }
+	
+	parsedIP := net.ParseIP(remoteIPStr)
 	incidentID := uuid.New().String()[:8]
 
 	// Determine if this is an AI endpoint
@@ -299,7 +374,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if e.IsWhitelisted(remoteIP) {
+	if e.IsWhitelisted(parsedIP) {
 		e.Proxy.ServeHTTP(w, r)
 		return
 	}
@@ -309,19 +384,19 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ua := r.UserAgent()
 		for _, blockedUA := range e.Config.BlockedUserAgents {
 			if strings.Contains(ua, blockedUA) {
-				e.serveBlockPage(w, incidentID, remoteIP, r, &scanner.Detection{Type: "Blocked User-Agent", Pattern: blockedUA, Level: scanner.LevelCritical}, false)
+				e.serveBlockPage(w, incidentID, remoteIPStr, r, &scanner.Detection{Type: "Blocked User-Agent", Pattern: blockedUA, Level: scanner.LevelCritical}, false)
 				return
 			}
 		}
 	}
 
 	// Check IP blocklist (manual blocks and subnets)
-	if _, blocked := e.BlockedIPs.Load(remoteIP); blocked {
-		e.serveBlockPage(w, incidentID, remoteIP, r, nil, true)
+	if _, blocked := e.BlockedIPs.Load(remoteIPStr); blocked {
+		e.serveBlockPage(w, incidentID, remoteIPStr, r, nil, true)
 		return
 	}
-	if e.IsIPBlockedBySubnet(remoteIP) {
-		e.serveBlockPage(w, incidentID, remoteIP, r, &scanner.Detection{Type: "IP Blocklist", Level: scanner.LevelCritical}, false)
+	if e.IsIPBlockedBySubnet(parsedIP, remoteIPStr) {
+		e.serveBlockPage(w, incidentID, remoteIPStr, r, &scanner.Detection{Type: "IP Blocklist", Level: scanner.LevelCritical}, false)
 		return
 	}
 
@@ -338,7 +413,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// --- DLP: Request Path Shield ---
 	if dlpDetection := dlp.AnalyzeRequest(decodedPath); dlpDetection != nil {
-		e.serveBlockPage(w, incidentID, remoteIP, r, dlpDetection, false)
+		e.serveBlockPage(w, incidentID, remoteIPStr, r, dlpDetection, false)
 		return
 	}
 
@@ -355,7 +430,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Body:      bodyCaptured,
 		Headers:   r.Header,
 		Cookies:   cookieMap,
-		IP:        remoteIP,
+		IP:        remoteIPStr,
 		UserAgent: r.UserAgent(),
 		IsAI:      isAI,
 		
@@ -380,7 +455,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if detection != nil {
-		e.serveBlockPage(w, incidentID, remoteIP, r, detection, false)
+		e.serveBlockPage(w, incidentID, remoteIPStr, r, detection, false)
 		return
 	}
 
@@ -396,7 +471,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				decoded, _ := url.QueryUnescape(powCookie.Value)
 				parts := strings.SplitN(decoded, "|", 2)
 				if len(parts) == 2 {
-					if e.PoW.ValidateSolution(remoteIP, parts[0], parts[1]) {
+					if e.PoW.ValidateSolution(remoteIPStr, parts[0], parts[1]) {
 						powVerified = true
 					}
 				}
@@ -404,7 +479,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			
 			if !powVerified {
 				// Send invisible JS challenge
-				challenge := e.PoW.GenerateChallenge(remoteIP)
+				challenge := e.PoW.GenerateChallenge(remoteIPStr)
 				html := e.PoW.JSInjector(challenge)
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Header().Set("Cache-Control", "no-store, max-age=0")
@@ -418,7 +493,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	entry := LogEntry{
 		ID:          incidentID,
 		Timestamp:   time.Now(),
-		RemoteIP:    remoteIP,
+		RemoteIP:    remoteIPStr,
 		Method:      r.Method,
 		Path:        r.URL.Path,
 		Agent:       r.UserAgent(),

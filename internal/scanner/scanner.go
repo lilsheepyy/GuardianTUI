@@ -36,13 +36,18 @@ func LoadCustomAIRules(path string) error {
 func Scan(params ScanParams) *Detection {
 	var d *Detection
 
+	// Pre-normalize common components to avoid redundant processing
+	normPath := utils.Normalize(params.Path)
+	normQuery := utils.Normalize(params.Query)
+	normBody := utils.Normalize(params.Body)
+
 	// 1. ZERO TOLERANCE: CSAM SHIELD
 	// High-priority heuristic check across all request components
 	var parts []string
-	if params.Path != "" { parts = append(parts, params.Path) }
-	if params.Query != "" { parts = append(parts, params.Query) }
-	if params.Body != "" { parts = append(parts, params.Body) }
-	combinedInput := utils.Normalize(strings.Join(parts, " "))
+	if normPath != "" { parts = append(parts, normPath) }
+	if normQuery != "" { parts = append(parts, normQuery) }
+	if normBody != "" { parts = append(parts, normBody) }
+	combinedInput := strings.Join(parts, " ")
 	
 	if csamDet := csam.AnalyzeCSAM(combinedInput); csamDet != nil {
 		return csamDet
@@ -114,29 +119,28 @@ func Scan(params ScanParams) *Detection {
 
 	// 5. URL (Path & Query)
 	if d == nil {
-		if d = web.MatchPatterns(utils.Normalize(params.Path), params.MaxScanSize); d != nil {
+		if d = web.MatchPatterns(normPath, params.MaxScanSize); d != nil {
 			d.Type = "Path Attack: " + d.Type
 		}
 	}
 	if d == nil {
-		if d = web.MatchPatterns(utils.Normalize(params.Query), params.MaxScanSize); d != nil {
+		if d = web.MatchPatterns(normQuery, params.MaxScanSize); d != nil {
 			d.Type = "Query Attack: " + d.Type
 		}
 	}
 
 	// 5. Body / AI Shield / PII
 	if d == nil {
-		bodyNorm := utils.Normalize(params.Body)
 		if params.IsAI {
-			if aiD := ai.AnalyzeAIAbuse(bodyNorm, params.AIScoreThreshold); aiD != nil {
+			if aiD := ai.AnalyzeAIAbuse(normBody, params.AIScoreThreshold); aiD != nil {
 				d = aiD
 			}
 		}
 		// If AI didn't catch it or not an AI endpoint, check PII and general patterns
 		if d == nil {
-			if piiD := pii.AnalyzePII(bodyNorm); piiD != nil {
+			if piiD := pii.AnalyzePII(normBody); piiD != nil {
 				d = piiD
-			} else if webD := web.MatchPatterns(bodyNorm, params.MaxScanSize); webD != nil {
+			} else if webD := web.MatchPatterns(normBody, params.MaxScanSize); webD != nil {
 				d = webD
 				d.Type = "Body Attack: " + d.Type
 			}
