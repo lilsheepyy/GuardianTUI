@@ -190,7 +190,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Dynamic reserved height calculation based on component visibility
 		// Base UI (Header, Stats, Terminal, Footer, Padding) = ~12 lines
-		reservedHeight := 12
+		reservedHeight := 13
 		showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
 		
 		if showCharts {
@@ -208,7 +208,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table.SetHeight(newHeight)
 
 		// Dynamic column widths based on terminal width
-		idW, timeW, ipW, statusW := 8, 10, 16, 35
+		idW, timeW, ipW, statusW := 8, 10, 16, 30
 		if m.width < 100 {
 			idW, timeW, ipW, statusW = 6, 9, 15, 20
 		}
@@ -325,8 +325,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 										difficulty = m.engine.Config.Engine.PoWDifficulty
 									}
 									// Lazy init PoW
-									// Note: pow.NewSystem might need a proper key if it was using one, 
-									// but here we use empty string as default.
 									m.engine.PoW = proxy.NewPoWSystem(difficulty, "")
 								}
 							}
@@ -515,7 +513,7 @@ func (m model) renderThreatDistribution() string {
 	}
 
 	for i, kv := range ss {
-		if i >= 5 { break }
+		if i >= 4 { break } // Save space
 		percent := 0.0
 		if m.totalBlocks > 0 {
 			percent = (float64(kv.Value) / float64(m.totalBlocks)) * 100
@@ -528,14 +526,14 @@ func (m model) renderThreatDistribution() string {
 	
 	distWidth := 45
 	if m.width < 110 { distWidth = m.width - 10 }
-	return styleBox.Width(distWidth).Height(10).Render(b.String())
+	return styleBox.Width(distWidth).Height(8).Render(b.String())
 }
 
 func (m model) renderActivityChart() string {
 	styleStatLabel := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
 	styleBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
 
-	height := 6
+	height := 5 // Reduced height to save space
 	chartWidth := 60
 	if m.width < 110 { chartWidth = m.width - 20 }
 	if chartWidth < 20 { chartWidth = 20 }
@@ -544,7 +542,7 @@ func (m model) renderActivityChart() string {
 	b.WriteString(styleStatLabel.Render("LIVE SECURITY TRAFFIC (60s)") + "\n\n")
 	
 	for h := height; h > 0; h-- {
-		// Scale max for axis
+		// Scale max for axis - consistent 3-character padding
 		axisVal := 0
 		if m.maxVal > 0 {
 			axisVal = h * (m.maxVal / height)
@@ -570,12 +568,12 @@ func (m model) renderActivityChart() string {
 			} else if h <= (safeH + alertH) {
 				b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Success).Render("█"))
 			} else {
-				b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Dim).Render("·"))
+				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#1f2937")).Render("·"))
 			}
 		}
 		b.WriteString("\n")
 	}
-	return styleBox.Width(chartWidth + 10).Height(10).Render(b.String())
+	return styleBox.Width(chartWidth + 10).Height(8).Render(b.String())
 }
 
 func truncateString(s string, l int) string {
@@ -679,7 +677,7 @@ func (m model) View() string {
 		statusLine = footerStyle.
 			Background(m.theme.Alert).
 			Foreground(m.theme.Text).
-			Render(" 🚨 CRITICAL: " + truncateString(m.lastAlert, m.width-25) + footerTS)
+			Render(" 🚨 CRITICAL: " + truncateString(m.lastAlert, m.width-35) + footerTS)
 	} else {
 		statusLine = footerStyle.
 			Background(m.theme.Success).
