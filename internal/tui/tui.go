@@ -90,6 +90,8 @@ type model struct {
 	searching   bool
 	searchInput textinput.Model
 	theme       Theme
+	suggestion  string
+	suggIdx     int
 
 	// Dashboard Data
 	history        []stats
@@ -151,6 +153,7 @@ func NewModel(logChan chan proxy.LogEntry, themeName string) model {
 		threatTypes: make(map[string]int),
 		startTime:   time.Now(),
 		theme:       theme,
+		suggIdx:     -1,
 	}
 }
 
@@ -222,6 +225,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.searching {
 			switch msg.String() {
+			case "tab":
+				val := strings.ToLower(m.searchInput.Value())
+				if strings.HasPrefix("themes set ", val) && !strings.HasPrefix(val, "themes set ") {
+					m.searchInput.SetValue("themes set ")
+					m.searchInput.SetCursor(len("themes set "))
+				} else if strings.HasPrefix(val, "themes set ") {
+					themeList := []string{"cyber", "forest", "dracula", "monochrome"}
+					m.suggIdx = (m.suggIdx + 1) % len(themeList)
+					m.searchInput.SetValue("themes set " + themeList[m.suggIdx])
+					m.searchInput.SetCursor(len(m.searchInput.Value()))
+				}
+				return m, nil
 			case "enter":
 				val := m.searchInput.Value()
 				if strings.HasPrefix(strings.ToLower(val), "themes set ") {
@@ -263,6 +278,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			var tiCmd tea.Cmd
 			m.searchInput, tiCmd = m.searchInput.Update(msg)
+			if msg.String() != "tab" {
+				m.suggIdx = -1
+			}
 			m.updateTable()
 			return m, tiCmd
 		}
@@ -508,7 +526,7 @@ func (m model) View() string {
 	} else if m.searchInput.Value() != "" {
 		searchArea = styleSearch.Render(" 🎯 ACTIVE FILTER: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to reset)")
 	} else {
-		searchArea = lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] SEARCH LOGS  [q] QUIT")
+		searchArea = lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] SEARCH LOGS | [themes set <name>] | [tab] AUTOCOMPLETE | [q] QUIT")
 	}
 
 	statusLine := ""
