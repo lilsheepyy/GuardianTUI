@@ -187,19 +187,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Adaptive table height - reserved space for other UI components
-		reservedHeight := 24
+		// Adaptive table height - precisely calculated based on View structure
+		// Header(1) + Newline(1) + Stats(4) + Charts(10) + Terminal(2) + Footer(1) + Padding(2)
+		reservedHeight := 21
 		if m.width < 110 {
-			reservedHeight = 32 // More space if layout stacks vertically
+			reservedHeight = 30 // Charts stack vertically
 		}
+		
 		newHeight := m.height - reservedHeight
-		if newHeight < 5 {
-			newHeight = 5
+		if newHeight < 4 {
+			newHeight = 4
 		}
 		m.table.SetHeight(newHeight)
 
-		totalWidth := m.width - 6
-		pathWidth := totalWidth - 8 - 10 - 16 - 35 - 8
+		totalWidth := m.width - 8 // Account for main padding
+		pathWidth := totalWidth - 8 - 10 - 16 - 35 - 4
 		if pathWidth < 10 {
 			pathWidth = 10
 		}
@@ -429,18 +431,21 @@ func (m model) renderStats() string {
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top,
 		styleBox.Width(boxWidth).Render(s1),
+		lipgloss.NewStyle().Width(1).Render(" "),
 		styleBox.Width(boxWidth).Render(s2),
+		lipgloss.NewStyle().Width(1).Render(" "),
 		styleBox.Width(boxWidth).Render(s3),
+		lipgloss.NewStyle().Width(1).Render(" "),
 		styleBox.Width(boxWidth).Render(s4),
 	)
 
 	if m.width < 80 {
 		row = lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s1), styleBox.Width(boxWidth).Render(s2)),
-			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s3), styleBox.Width(boxWidth).Render(s4)),
+			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s1), lipgloss.NewStyle().Width(1).Render(" "), styleBox.Width(boxWidth).Render(s2)),
+			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s3), lipgloss.NewStyle().Width(1).Render(" "), styleBox.Width(boxWidth).Render(s4)),
 		)
 	}
-	return row
+	return lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center, row)
 }
 
 func (m model) renderThreatDistribution() string {
@@ -481,7 +486,7 @@ func (m model) renderThreatDistribution() string {
 	
 	distWidth := 45
 	if m.width < 110 { distWidth = m.width - 10 }
-	return styleBox.Width(distWidth).Height(7).Render(b.String())
+	return styleBox.Width(distWidth).Height(10).Render(b.String())
 }
 
 func (m model) renderActivityChart() string {
@@ -502,7 +507,7 @@ func (m model) renderActivityChart() string {
 		if m.maxVal > 0 {
 			axisVal = h * (m.maxVal / height)
 		}
-		b.WriteString(fmt.Sprintf("%2d ", axisVal))
+		b.WriteString(fmt.Sprintf("%3d ", axisVal))
 		
 		// Adjust history to fit chartWidth
 		visibleHistory := m.history
@@ -528,7 +533,7 @@ func (m model) renderActivityChart() string {
 		}
 		b.WriteString("\n")
 	}
-	return styleBox.Width(chartWidth + 10).Height(7).Render(b.String())
+	return styleBox.Width(chartWidth + 10).Height(10).Render(b.String())
 }
 
 func truncateString(s string, l int) string {
@@ -538,75 +543,107 @@ func truncateString(s string, l int) string {
 }
 
 func (m model) View() string {
-	styleHeader := lipgloss.NewStyle().
-			Foreground(m.theme.Primary).
-			Bold(true).
-			Padding(0, 1).
-			BorderStyle(lipgloss.DoubleBorder()).
-			BorderForeground(m.theme.Primary)
+	if m.width == 0 || m.height == 0 {
+		return "Initializing Dashboard..."
+	}
 
-	styleBox := lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(m.theme.Dim).
-			Padding(1)
+	// 1. Header Section
+	headerStyle := lipgloss.NewStyle().
+		Foreground(m.theme.Primary).
+		Background(m.theme.Secondary).
+		Bold(true).
+		Padding(0, 2).
+		Width(m.width).
+		Align(lipgloss.Center)
 
-	styleSearch := lipgloss.NewStyle().
-			Foreground(m.theme.Primary).
-			Italic(true)
-
-	modeStr := "IPS"
+	modeStr := "IPS (ACTIVE)"
 	if m.engine != nil {
 		modeStr = strings.ToUpper(m.engine.Mode)
+		if modeStr == "IDS" { modeStr = "IDS (PASSIVE)" }
 	}
 
-	header := styleHeader.Render(fmt.Sprintf("🛡️  GUARDIAN TUI v2.0 | MODE: %s | THEME: %s", modeStr, strings.ToUpper(m.theme.Name)))
-	
-	var topRow string
+	header := headerStyle.Render(fmt.Sprintf("🛡️  GUARDIAN TUI v2.0 | MODE: %s | THEME: %s", modeStr, strings.ToUpper(m.theme.Name)))
+
+	// 2. Stats Section
+	statsRow := m.renderStats()
+
+	// 3. Visualization Section (Charts)
+	var vizRow string
 	if m.width >= 110 {
-		topRow = lipgloss.JoinHorizontal(lipgloss.Top, 
-			m.renderActivityChart(),
-			m.renderThreatDistribution(),
+		vizRow = lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center,
+			lipgloss.JoinHorizontal(lipgloss.Top,
+				m.renderActivityChart(),
+				lipgloss.NewStyle().Width(2).Render(" "),
+				m.renderThreatDistribution(),
+			),
 		)
 	} else {
-		topRow = lipgloss.JoinVertical(lipgloss.Left, 
-			m.renderActivityChart(),
-			m.renderThreatDistribution(),
+		vizRow = lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center,
+			lipgloss.JoinVertical(lipgloss.Center,
+				m.renderActivityChart(),
+				m.renderThreatDistribution(),
+			),
 		)
 	}
 
-	searchArea := ""
+	// 4. Command/Terminal Area
+	var cmdArea string
+	termStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		BorderForeground(m.theme.Dim).
+		Width(m.width - 4).
+		Padding(0, 1)
+
 	if m.searching {
-		searchArea = styleBox.BorderForeground(m.theme.Primary).Render(m.searchInput.View())
+		cmdArea = termStyle.BorderForeground(m.theme.Primary).Render(m.searchInput.View())
 	} else if m.searchInput.Value() != "" {
-		searchArea = styleSearch.Render(" 🎯 TERMINAL: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to reset)")
+		activeFilterStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Italic(true)
+		cmdArea = termStyle.Render(activeFilterStyle.Render("🎯 FILTERED: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to clear)"))
 	} else {
-		searchArea = lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE | [q] QUIT")
+		helpStyle := lipgloss.NewStyle().Foreground(m.theme.Dim).Width(m.width - 6)
+		cmdArea = termStyle.Render(helpStyle.Render("[/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE"))
 	}
 
-	statusLine := ""
+	// 5. Main Table Area
+	tableBox := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Dim).
+		Padding(0).
+		MarginTop(1).
+		Width(m.width - 4).
+		Render(m.table.View())
+
+	// 6. Status/Alert Footer
+	var statusLine string
+	footerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Padding(0, 1).
+		Width(m.width)
+
 	if m.lastAlert != "" {
-		statusLine = lipgloss.NewStyle().
+		statusLine = footerStyle.
 			Background(m.theme.Alert).
 			Foreground(m.theme.Text).
-			Bold(true).
-			Padding(0, 1).
-			Render(" 🚨 CRITICAL INCIDENT DETECTED: " + m.lastAlert + " ")
+			Render(" 🚨 CRITICAL INCIDENT: " + truncateString(m.lastAlert, m.width-35) + " | " + time.Now().Format("15:04:05"))
 	} else {
-		statusLine = lipgloss.NewStyle().
+		statusLine = footerStyle.
 			Background(m.theme.Success).
 			Foreground(lipgloss.Color("#000")).
-			Bold(true).
-			Padding(0, 1).
-			Render(" ✨ SYSTEM STATUS: FULL MONITORING MODE - ALL SYSTEMS NOMINAL ")
+			Render(" ✨ SYSTEM STATUS: ALL SYSTEMS NOMINAL - MONITORING ACTIVE | " + time.Now().Format("15:04:05"))
 	}
 
+	// Final Assembly
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		"\n",
-		m.renderStats(),
-		topRow,
-		searchArea,
-		styleBox.BorderForeground(m.theme.Secondary).Render(m.table.View()),
+		lipgloss.NewStyle().Padding(0, 2).Render(
+			lipgloss.JoinVertical(lipgloss.Left,
+				statsRow,
+				vizRow,
+				cmdArea,
+				tableBox,
+			),
+		),
 		statusLine,
 	)
 }
