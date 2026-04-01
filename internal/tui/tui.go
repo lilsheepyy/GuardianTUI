@@ -231,9 +231,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if newTheme, ok := themes[newThemeName]; ok {
 							m.theme = newTheme
 							// Re-apply styles to the table as it's a sub-component
-							s := m.table.Styles()
-							s.Header = s.Header.BorderForeground(m.theme.Dim).Foreground(m.theme.Primary)
-							s.Selected = s.Selected.Foreground(m.theme.Text).Background(m.theme.Accent)
+							s := table.DefaultStyles()
+							s.Header = s.Header.
+								BorderStyle(lipgloss.NormalBorder()).
+								BorderForeground(m.theme.Dim).
+								BorderBottom(true).
+								Bold(true).
+								Foreground(m.theme.Primary)
+							s.Selected = s.Selected.
+								Foreground(m.theme.Text).
+								Background(m.theme.Accent).
+								Bold(false)
 							m.table.SetStyles(s)
 						}
 					}
