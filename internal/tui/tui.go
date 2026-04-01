@@ -231,22 +231,43 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "tab":
 				val := strings.ToLower(m.searchInput.Value())
-				if strings.HasPrefix("themes set ", val) && !strings.HasPrefix(val, "themes set ") {
-					m.searchInput.SetValue("themes set ")
-					m.searchInput.SetCursor(len("themes set "))
-				} else if strings.HasPrefix(val, "themes set ") {
-					themeList := []string{"cyber", "forest", "dracula", "monochrome"}
+				themeList := []string{"cyber", "forest", "dracula", "monochrome"}
+				modeList := []string{"ips", "ids", "strict"}
+				baseCmds := []string{"search ", "themes set ", "modes set ", "clear", "quit"}
+
+				// Case 1: Sub-command completion for Themes
+				if strings.HasPrefix(val, "themes set ") {
 					m.suggIdx = (m.suggIdx + 1) % len(themeList)
 					m.searchInput.SetValue("themes set " + themeList[m.suggIdx])
 					m.searchInput.SetCursor(len(m.searchInput.Value()))
-				} else if strings.HasPrefix("modes set ", val) && !strings.HasPrefix(val, "modes set ") {
-					m.searchInput.SetValue("modes set ")
-					m.searchInput.SetCursor(len("modes set "))
-				} else if strings.HasPrefix(val, "modes set ") {
-					modeList := []string{"ips", "ids", "strict"}
+					return m, nil
+				}
+
+				// Case 2: Sub-command completion for Modes
+				if strings.HasPrefix(val, "modes set ") {
 					m.suggIdx = (m.suggIdx + 1) % len(modeList)
 					m.searchInput.SetValue("modes set " + modeList[m.suggIdx])
 					m.searchInput.SetCursor(len(m.searchInput.Value()))
+					return m, nil
+				}
+
+				// Case 3: Top-level command cycle
+				// Cycle through base commands if empty or matching a prefix
+				matched := false
+				for _, cmd := range baseCmds {
+					if strings.HasPrefix(cmd, val) && val != cmd {
+						m.searchInput.SetValue(cmd)
+						m.searchInput.SetCursor(len(cmd))
+						matched = true
+						break
+					}
+				}
+
+				if !matched {
+					// If already exactly matching a base command or no prefix match, just cycle
+					m.suggIdx = (m.suggIdx + 1) % len(baseCmds)
+					m.searchInput.SetValue(baseCmds[m.suggIdx])
+					m.searchInput.SetCursor(len(baseCmds[m.suggIdx]))
 				}
 				return m, nil
 			case "enter":
@@ -303,6 +324,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.searchInput.Blur()
 					m.updateTable()
 					return m, nil
+				} else if strings.EqualFold(val, "clear") {
+					m.searchInput.SetValue("")
+					m.searching = false
+					m.searchInput.Blur()
+					m.updateTable()
+					return m, nil
+				} else if strings.EqualFold(val, "quit") {
+					return m, tea.Quit
 				}
 				m.searching = false
 				m.searchInput.Blur()
