@@ -36,14 +36,26 @@ A live-scrolling feed of all security events.
 
 ## ⌨️ Interactive Commands
 
-GuardianTUI provides efficient keyboard shortcuts for active incident investigation:
+GuardianTUI provides efficient keyboard shortcuts and a command-line interface for dashboard control:
 
-- **`/` (Terminal Mode)**: Open the command bar.
+### Terminal Mode (`/`)
+Press `/` to open the terminal bar. The following commands are available:
+
 - **`search <query>`**: Filter the log feed by **ID**, **Source IP**, or **Security Status**.
-- **`themes set <name>`**: While in search mode, type this to change the dashboard's visual theme. Available themes: `cyber`, `forest`, `dracula`, `monochrome`.
-- **`modes set <name>`**: While in search mode, type this to change the operational mode. Available modes: `ips`, `ids`, `strict`.
-- **`ESC`**: Clear the active filter and return to live feed.
-- **`Arrow Keys`**: Scroll through the history of captured attacks.
+- **`themes set <name>`**: Change the dashboard's visual theme (e.g., `cyber`, `forest`, `dracula`, `monochrome`).
+- **`modes set <name>`**: Change the operational mode (e.g., `ips`, `ids`, `strict`).
+- **`clear`**: Resets all active filters and returns to the live feed.
+- **`quit`**: Gracefully shuts down the proxy and exits.
+
+### Advanced Autocomplete
+GuardianTUI features a smart **Tab-completion** system:
+- **Command Completion**: Type a few letters (e.g., `the`) and press `Tab` to complete the command.
+- **Argument Cycling**: Press `Tab` after `themes set ` or `modes set ` to cycle through all available options.
+- **Top-level Cycling**: Press `Tab` on an empty prompt to cycle through all primary commands.
+
+### Navigation
+- **`ESC`**: Instantly clear the terminal input and return to live feed.
+- **`Arrow Keys`**: Scroll through the history of captured attacks in the log table.
 - **`Q` or `CTRL+C`**: Shutdown the proxy and exit.
 
 ---
@@ -58,14 +70,6 @@ GuardianTUI supports multiple visual themes to suit your preference:
 | `forest` | Green, Brown, Teal | Nature-inspired, easier on the eyes |
 | `dracula` | Purple, Pink, Green | Classic dark mode developer palette |
 | `monochrome` | White, Greys | Minimalist, high-contrast |
-
-### Changing Themes
-You can set the default theme in `config.yaml`:
-```yaml
-tui:
-  theme: "dracula"
-```
-Or change it dynamically within the TUI by pressing `/` and typing `themes set dracula`.
 
 ---
 
