@@ -45,6 +45,22 @@ var (
 		},
 	}
 
+	// Advanced RCE & Command Injection Heuristics
+	rcePatterns = []CompiledDetection{
+		{
+			Detection: models.Detection{Level: models.LevelCritical, Type: "RCE: System Discovery Command"},
+			Regex:     regexp.MustCompile(`(?i)[;&|]\s*(whoami|id|ls|cat|dir|uname|hostname|ifconfig|ipconfig|netstat|ps|env|printenv|tasklist)\b`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelCritical, Type: "RCE: Execution Wrapper"},
+			Regex:     regexp.MustCompile("(?i)`.*?`|\\$\\(.*?\\)"),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelHigh, Type: "RCE: Dangerous Binary/Script"},
+			Regex:     regexp.MustCompile(`(?i);\s*rm\s+-|\|\s*bash\b|;\s*sh\b|;\s*python\b|&\s*powershell\b|;\s*nc\s+|;\s*curl\s+|;\s*wget\s+`),
+		},
+	}
+
 	// Advanced Path Traversal Heuristics
 	traversalPatterns = []CompiledDetection{
 		{
@@ -87,10 +103,6 @@ var (
 			Detection: models.Detection{Level: models.LevelHigh, Type: "XSS: Script Injection"},
 			Regex:     regexp.MustCompile(`(?i)<script.*?>|javascript:|on\w+\s*=|alert\s*\(|confirm\s*\(|prompt\s*\(`),
 		},
-		{
-			Detection: models.Detection{Level: models.LevelHigh, Type: "Command Injection"},
-			Regex:     regexp.MustCompile(`(?i);\s*rm\s+-|\|\s*bash\b|;\s*cat\s+|&\s*powershell\b|;\s*nc\s+`),
-		},
 	}
 
 	agentBlacklist = []string{
@@ -116,7 +128,16 @@ func MatchPatterns(input string, maxSize int) *models.Detection {
 		}
 	}
 
-	// 2. Run Advanced SQLi Checks
+	// 2. Run RCE / Command Injection Checks
+	for _, p := range rcePatterns {
+		if p.Regex.MatchString(input) {
+			d := p.Detection
+			d.Pattern = p.Regex.FindString(input)
+			return &d
+		}
+	}
+
+	// 3. Run Advanced SQLi Checks
 	for _, p := range sqliPatterns {
 		if p.Regex.MatchString(input) {
 			d := p.Detection
@@ -125,7 +146,7 @@ func MatchPatterns(input string, maxSize int) *models.Detection {
 		}
 	}
 
-	// 3. Run Path Traversal Checks
+	// 4. Run Path Traversal Checks
 	for _, p := range traversalPatterns {
 		if p.Regex.MatchString(input) {
 			d := p.Detection
@@ -134,7 +155,7 @@ func MatchPatterns(input string, maxSize int) *models.Detection {
 		}
 	}
 
-	// 4. Run General Web Attack Checks
+	// 5. Run General Web Attack Checks
 	for _, p := range webPatterns {
 		if p.Regex.MatchString(input) {
 			d := p.Detection
