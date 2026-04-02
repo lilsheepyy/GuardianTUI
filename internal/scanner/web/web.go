@@ -109,7 +109,7 @@ var (
 		},
 		{
 			Detection: models.Detection{Level: models.LevelHigh, Type: "Exploit: Potential Buffer Overflow"},
-			Regex:     regexp.MustCompile(`(?i)A{128,}|[a-zA-Z0-9]{1024,}|%{10,}[snpx]`),
+			Regex:     regexp.MustCompile(`(?i)A{128,}|[a-zA-Z0-9]{999,}|%{10,}[snpx]`),
 		},
 		{
 			Detection: models.Detection{Level: models.LevelCritical, Type: "Exploit: Shellcode Pattern"},
