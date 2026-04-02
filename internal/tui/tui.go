@@ -189,19 +189,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Dynamic reserved height calculation
-		// Base UI (Padding-Top(6), Status(1), Header(1), Spacer(1), Stats(4), Terminal(2), Footer(1)) = 16 lines
-		reservedHeight := 16
+		// Dynamic reserved height calculation based on TP(4) + StatusBar(1) + NL(1) + Header(1) + NL(1) + Stats(4) + Terminal(2) + Footer(1)
+		reservedHeight := 15
 		showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
-		
+
 		if showCharts {
 			if m.width >= 110 {
-				reservedHeight += 11 // Side-by-side charts
+				reservedHeight += 9 // Side-by-side charts (height 8 + 1 newline)
 			} else {
-				reservedHeight += 21 // Stacked charts
+				reservedHeight += 17 // Stacked charts (height 8+8 + 1 newline)
 			}
 		}
-		
+
 		newHeight := m.height - reservedHeight
 		if newHeight < 4 {
 			newHeight = 4
@@ -575,5 +574,5 @@ func (m model) View() string {
 	}
 
 	mainContent := lipgloss.JoinVertical(lipgloss.Left, statusBar, "\n", header, "\n", lipgloss.NewStyle().Padding(0, 2).Render(lipgloss.JoinVertical(lipgloss.Left, statsRow, vizRow, cmdArea, tableBox)), statusLine)
-	return lipgloss.NewStyle().Padding(6, 2, 0, 2).Render(mainContent)
+	return lipgloss.NewStyle().Padding(4, 2, 0, 2).Render(mainContent)
 }
