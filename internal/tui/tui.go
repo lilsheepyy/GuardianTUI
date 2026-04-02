@@ -317,7 +317,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "q", "ctrl+c": return m, tea.Quit
-		case "/": m.searching = true; m.searchInput.Focus(); return m, nil
+		case "/":
+			m.searching = true
+			m.searchInput.SetValue("") // Clear previous command
+			m.suggIdx = -1             // Reset autocomplete
+			m.searchInput.Focus()
+			return m, nil
 		case "esc": m.searchInput.SetValue(""); m.updateTable(); return m, nil
 		}
 
