@@ -495,33 +495,45 @@ func (m model) View() string {
 	if m.width == 0 || m.height == 0 { return "Initializing Dashboard..." }
 	contentWidth := m.width - 4
 
-	// 0. Top Status Bar (System-like line)
+	// 0. Top Branding & Status Bar
 	hostname, _ := os.Hostname()
-	statusBarStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Text).
+	brandStyle := lipgloss.NewStyle().
+		Background(m.theme.Primary).
+		Foreground(lipgloss.Color("#000")).
+		Bold(true).
+		Padding(0, 1)
+	
+	statusStyle := lipgloss.NewStyle().
 		Background(m.theme.Dim).
-		Width(contentWidth)
+		Foreground(m.theme.Text).
+		Padding(0, 1)
+
+	brandPart := brandStyle.Render("🛡️  GUARDIANTUI v2.0")
+	modePart := statusStyle.Render(" MODE: " + strings.ToUpper(m.engine.Mode) + " ")
+	hostPart := statusStyle.Faint(true).Render(" " + hostname + " ")
+	timePart := statusStyle.Render(" " + time.Now().Format("15:04:05") + " ")
 	
-	verPart := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true).Render(" GUARDIAN v2.0 ")
-	hostPart := lipgloss.NewStyle().Faint(true).Render(" " + hostname + " ")
-	timePart := time.Now().Format(" 15:04:05 ")
-	
-	statusBar := statusBarStyle.Render(
-		lipgloss.JoinHorizontal(lipgloss.Center,
-			verPart,
-			lipgloss.NewStyle().Width(contentWidth - lipgloss.Width(verPart) - lipgloss.Width(hostPart) - lipgloss.Width(timePart)).Render(""),
-			hostPart,
-			timePart,
-		),
+	// Flexible spacer
+	spacerWidth := contentWidth - lipgloss.Width(brandPart) - lipgloss.Width(modePart) - lipgloss.Width(hostPart) - lipgloss.Width(timePart)
+	if spacerWidth < 0 { spacerWidth = 0 }
+	spacer := lipgloss.NewStyle().Width(spacerWidth).Background(m.theme.Dim).Render("")
+
+	statusBar := lipgloss.JoinHorizontal(lipgloss.Top,
+		brandPart,
+		modePart,
+		spacer,
+		hostPart,
+		timePart,
 	)
 
-	// 1. Header Section
-	headerStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Background(m.theme.Secondary).Bold(true).Padding(0, 2).Width(contentWidth).Align(lipgloss.Center)
-	modeStr := "IPS (ACTIVE)"
-	if m.engine != nil {
-		if strings.ToLower(m.engine.Mode) == "ids" { modeStr = "IDS (PASSIVE)" } else if strings.ToLower(m.engine.Mode) == "strict" { modeStr = "STRICT (ACTIVE)" }
-	}
-	header := headerStyle.Render(fmt.Sprintf("🛡️  GUARDIAN TUI | MODE: %s | THEME: %s", modeStr, strings.ToUpper(m.theme.Name)))
+	// 1. Sub-Header Section (Centered Theme/Status Info)
+	headerStyle := lipgloss.NewStyle().
+		Foreground(m.theme.Primary).
+		Bold(true).
+		Width(contentWidth).
+		Align(lipgloss.Center)
+	
+	header := headerStyle.Render("L7 INTRUSION PREVENTION SYSTEM | ACTIVE MONITORING")
 
 	// 2. Stats Section
 	statsRow := m.renderStats()
