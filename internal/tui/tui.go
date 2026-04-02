@@ -72,6 +72,17 @@ var themes = map[string]Theme{
 		Dim:        lipgloss.Color("#333333"),
 		Background: lipgloss.Color("#000000"),
 	},
+	"strict": {
+		Name:       "Strict Alert",
+		Primary:    lipgloss.Color("#ff0000"),
+		Secondary:  lipgloss.Color("#200000"),
+		Accent:     lipgloss.Color("#ff4d4d"),
+		Alert:      lipgloss.Color("#ffffff"),
+		Success:    lipgloss.Color("#ff9999"),
+		Text:       lipgloss.Color("#ffe5e5"),
+		Dim:        lipgloss.Color("#660000"),
+		Background: lipgloss.Color("#100000"),
+	},
 }
 
 type tickMsg time.Time
@@ -91,6 +102,7 @@ type model struct {
 	lastAlert   string
 	searching   bool
 	searchInput textinput.Model
+	userTheme   string // Store user preference to restore after leaving strict mode
 	theme       Theme
 	suggestion  string
 	suggIdx     int
@@ -107,9 +119,9 @@ type model struct {
 }
 
 func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName string) model {
-	theme, ok := themes[strings.ToLower(themeName)]
-	if !ok {
-		theme = themes["cyber"]
+	mTheme := themes["cyber"]
+	if t, ok := themes[strings.ToLower(themeName)]; ok {
+		mTheme = t
 	}
 
 	columns := []table.Column{
@@ -120,105 +132,76 @@ func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName strin
 		{Title: "REQUEST PATH", Width: 20},
 	}
 
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithFocused(true),
-		table.WithHeight(10),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(theme.Dim).
-		BorderBottom(true).
-		Bold(true).
-		Foreground(theme.Primary)
-	s.Selected = s.Selected.
-		Foreground(theme.Text).
-		Background(theme.Accent).
-		Bold(false)
-	t.SetStyles(s)
-
-	ti := textinput.New()
-	ti.Placeholder = "Enter command..."
-	ti.CharLimit = 100
-	ti.Width = 60
-	ti.Prompt = " ❯ "
+	t := table.New(table.WithColumns(columns), table.WithFocused(true), table.WithHeight(10))
 
 	return model{
 		table:       t,
 		logChan:     logChan,
 		engine:      engine,
 		logs:        make([]proxy.LogEntry, 0),
-		searchInput: ti,
+		searchInput: textinput.New(),
 		history:     make([]stats, 60),
 		maxVal:      10,
 		threatTypes: make(map[string]int),
 		startTime:   time.Now(),
-		theme:       theme,
+		userTheme:   strings.ToLower(themeName),
+		theme:       mTheme,
 		suggIdx:     -1,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(
-		waitForActivity(m.logChan),
-		tickEverySecond(),
-	)
+	m.searchInput.Placeholder = "Enter command..."
+	m.searchInput.CharLimit = 100
+	m.searchInput.Width = 60
+	m.searchInput.Prompt = " ❯ "
+	return tea.Batch(waitForActivity(m.logChan), tickEverySecond())
 }
 
 func tickEverySecond() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 func waitForActivity(c chan proxy.LogEntry) tea.Cmd {
-	return func() tea.Msg {
-		return logMsg(<-c)
-	}
+	return func() tea.Msg { return logMsg(<-c) }
 }
 
 type logMsg proxy.LogEntry
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// DYNAMIC MODE-THEME SYNC
+	if m.engine != nil {
+		if m.engine.Mode == "strict" && m.theme.Name != "Strict Alert" {
+			m.theme = themes["strict"]
+			m.applyTableStyles()
+		} else if m.engine.Mode != "strict" && m.theme.Name == "Strict Alert" {
+			m.theme = themes[m.userTheme]
+			if m.theme.Name == "" { m.theme = themes["cyber"] }
+			m.applyTableStyles()
+		}
+	}
+
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-
-		// PRECISION BUDGETING (Mission Control v2.1)
-		// UI breakdown: StatusBar(1) + Gap(1) + Metrics(3) + Gap(1) + viz(8 or 17) + Term(2) + Footer(1) + Padding(4)
+		m.width, m.height = msg.Width, msg.Height
 		reservedHeight := 13
 		showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
-		
 		if showCharts {
-			if m.width >= 110 {
-				reservedHeight += 9
-			} else {
-				reservedHeight += 17
-			}
+			if m.width >= 110 { reservedHeight += 9 } else { reservedHeight += 17 }
 		}
-		
 		newHeight := m.height - reservedHeight
 		if newHeight < 4 { newHeight = 4 }
 		m.table.SetHeight(newHeight)
 
 		idW, timeW, ipW, statusW := 8, 10, 16, 30
-		if m.width < 100 {
-			idW, timeW, ipW, statusW = 6, 9, 15, 20
-		}
-
+		if m.width < 100 { idW, timeW, ipW, statusW = 6, 9, 15, 20 }
 		totalWidth := m.width - 10
 		pathW := totalWidth - idW - timeW - ipW - statusW
 		if pathW < 10 { pathW = 10 }
-
 		m.table.SetColumns([]table.Column{
-			{Title: "ID", Width: idW},
-			{Title: "TIME", Width: timeW},
-			{Title: "SOURCE IP", Width: ipW},
-			{Title: "SECURITY STATUS", Width: statusW},
+			{Title: "ID", Width: idW}, {Title: "TIME", Width: timeW},
+			{Title: "SOURCE IP", Width: ipW}, {Title: "SECURITY STATUS", Width: statusW},
 			{Title: "REQUEST PATH", Width: pathW},
 		})
 
@@ -228,9 +211,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.current = stats{0, 0}
 		m.maxVal = 5
 		for _, s := range m.history {
-			if s.safe+s.alerts > m.maxVal {
-				m.maxVal = s.safe + s.alerts
-			}
+			if s.safe+s.alerts > m.maxVal { m.maxVal = s.safe + s.alerts }
 		}
 		return m, tickEverySecond()
 
@@ -242,7 +223,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				themeList := []string{"cyber", "forest", "dracula", "monochrome"}
 				modeList := []string{"ips", "ids", "strict"}
 				baseCmds := []string{"search ", "themes set ", "modes set ", "clear", "quit"}
-
 				if strings.HasPrefix(val, "themes set ") {
 					m.suggIdx = (m.suggIdx + 1) % len(themeList)
 					m.searchInput.SetValue("themes set " + themeList[m.suggIdx])
@@ -256,12 +236,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				matched := false
-				for _, cmd := range baseCmds {
-					if strings.HasPrefix(cmd, val) && val != cmd {
-						m.searchInput.SetValue(cmd)
-						m.searchInput.SetCursor(len(cmd))
-						matched = true
-						break
+				for _, bCmd := range baseCmds {
+					if strings.HasPrefix(bCmd, val) && val != bCmd {
+						m.searchInput.SetValue(bCmd); m.searchInput.SetCursor(len(bCmd))
+						matched = true; break
 					}
 				}
 				if !matched {
@@ -277,18 +255,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(parts) >= 3 {
 						newThemeName := strings.ToLower(parts[2])
 						if newTheme, ok := themes[newThemeName]; ok {
-							m.theme = newTheme
-							s := table.DefaultStyles()
-							s.Header = s.Header.BorderForeground(m.theme.Dim).Foreground(m.theme.Primary)
-							s.Selected = s.Selected.Foreground(m.theme.Text).Background(m.theme.Accent)
-							m.table.SetStyles(s)
+							m.userTheme = newThemeName
+							if m.engine.Mode != "strict" {
+								m.theme = newTheme
+								m.applyTableStyles()
+							}
 						}
 					}
-					m.searchInput.SetValue("")
-					m.searching = false
-					m.searchInput.Blur()
-					m.updateTable()
-					return m, nil
 				} else if strings.HasPrefix(strings.ToLower(val), "modes set ") {
 					parts := strings.Split(val, " ")
 					if len(parts) >= 3 {
@@ -302,17 +275,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-					m.searchInput.SetValue("")
-					m.searching = false
-					m.searchInput.Blur()
-					m.updateTable()
-					return m, nil
 				} else if strings.EqualFold(val, "clear") {
 					m.searchInput.SetValue("")
-					m.searching = false
-					m.searchInput.Blur()
-					m.updateTable()
-					return m, nil
 				} else if strings.EqualFold(val, "quit") {
 					return m, tea.Quit
 				}
@@ -321,10 +285,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateTable()
 				return m, nil
 			case "esc":
-				m.searching = false
-				m.searchInput.Blur()
-				m.updateTable()
-				return m, nil
+				m.searching = false; m.searchInput.Blur(); m.updateTable(); return m, nil
 			}
 			var tiCmd tea.Cmd
 			m.searchInput, tiCmd = m.searchInput.Update(msg)
@@ -334,22 +295,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "q", "ctrl+c": return m, tea.Quit
-		case "/":
-			m.searching = true
-			m.searchInput.Focus()
-			return m, nil
-		case "esc":
-			m.searchInput.SetValue("")
-			m.updateTable()
-			return m, nil
+		case "/": m.searching = true; m.searchInput.Focus(); return m, nil
+		case "esc": m.searchInput.SetValue(""); m.updateTable(); return m, nil
 		}
 
 	case logMsg:
 		entry := proxy.LogEntry(msg)
 		m.totalRequests++
 		if entry.Alert != nil || entry.Blocked {
-			m.current.alerts++
-			m.totalBlocks++
+			m.current.alerts++; m.totalBlocks++
 			if entry.Alert != nil { m.threatTypes[entry.Alert.Type]++ }
 		} else {
 			m.current.safe++
@@ -361,6 +315,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	m.table, cmd = m.table.Update(msg)
 	return m, cmd
+}
+
+func (m *model) applyTableStyles() {
+	s := table.DefaultStyles()
+	s.Header = s.Header.BorderForeground(m.theme.Dim).Foreground(m.theme.Primary).Bold(true)
+	s.Selected = s.Selected.Foreground(m.theme.Text).Background(m.theme.Accent)
+	m.table.SetStyles(s)
 }
 
 func (m *model) updateTable() {
@@ -377,35 +338,26 @@ func (m *model) updateTable() {
 	rows := make([]table.Row, 0)
 	for _, entry := range m.logs {
 		status := "PASSIVE MONITORING"
-		if entry.Alert != nil {
-			status = fmt.Sprintf("🛡️ DETECTED: %s", entry.Alert.Type)
-		}
+		if entry.Alert != nil { status = fmt.Sprintf("🛡️ DETECTED: %s", entry.Alert.Type) }
 		if entry.Blocked { status = "🚫 BLOCKED (IPS)" }
-		match := !isSearch || query == "" || 
-				 strings.Contains(strings.ToLower(entry.ID), query) ||
-				 strings.Contains(strings.ToLower(entry.RemoteIP), query) ||
-				 strings.Contains(strings.ToLower(status), query)
-		if match {
-			rows = append(rows, table.Row{entry.ID, entry.Timestamp.Format("15:04:05"), entry.RemoteIP, status, entry.Path})
-		}
+		match := !isSearch || query == "" || strings.Contains(strings.ToLower(entry.ID), query) || strings.Contains(strings.ToLower(entry.RemoteIP), query) || strings.Contains(strings.ToLower(status), query)
+		if match { rows = append(rows, table.Row{entry.ID, entry.Timestamp.Format("15:04:05"), entry.RemoteIP, status, entry.Path}) }
 	}
 	m.table.SetRows(rows)
 	if !isSearch { m.table.GotoBottom() }
 }
 
 func (m model) renderStats(width int) string {
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.theme.Dim).
-		Padding(0, 1).
-		Align(lipgloss.Center)
+	isStrict := m.engine != nil && m.engine.Mode == "strict"
+	border := lipgloss.RoundedBorder()
+	if isStrict { border = lipgloss.DoubleBorder() }
 
+	boxStyle := lipgloss.NewStyle().Border(border).BorderForeground(m.theme.Dim).Padding(0, 1).Align(lipgloss.Center)
 	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Faint(true).Bold(true)
 	valueStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
 	alertStyle := lipgloss.NewStyle().Foreground(m.theme.Alert).Bold(true)
 
 	uptime := time.Since(m.startTime).Round(time.Second).String()
-	
 	cardWidth := (width - 6) / 4
 	if cardWidth < 12 { cardWidth = 12 }
 
@@ -418,20 +370,24 @@ func (m model) renderStats(width int) string {
 }
 
 func (m model) renderThreatDistribution(width int) string {
-	styleBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
+	isStrict := m.engine != nil && m.engine.Mode == "strict"
+	border := lipgloss.RoundedBorder()
+	if isStrict { border = lipgloss.DoubleBorder() }
+
+	styleBox := lipgloss.NewStyle().Border(border).BorderForeground(m.theme.Dim).Padding(1)
 	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Faint(true)
 
 	var b strings.Builder
-	b.WriteString(labelStyle.Render("[ THREAT VECTORS ]") + "\n\n")
+	title := "[ THREAT VECTORS ]"
+	if isStrict { title = "🚨 [ CRITICAL THREAT INTELLIGENCE ] 🚨" }
+	b.WriteString(labelStyle.Render(title) + "\n\n")
 	
 	type kv struct { Key string; Value int }
 	var ss []kv
 	for k, v := range m.threatTypes { ss = append(ss, kv{k, v}) }
 	sort.Slice(ss, func(i, j int) bool { return ss[i].Value > ss[j].Value })
 
-	if len(ss) == 0 {
-		b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Dim).Render("CLEAN TRAFFIC"))
-	}
+	if len(ss) == 0 { b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Dim).Render("CLEAN TRAFFIC")) }
 	for i, kv := range ss {
 		if i >= 4 { break }
 		percent := 0.0
@@ -445,12 +401,18 @@ func (m model) renderThreatDistribution(width int) string {
 }
 
 func (m model) renderActivityChart(width int) string {
-	styleBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
+	isStrict := m.engine != nil && m.engine.Mode == "strict"
+	border := lipgloss.RoundedBorder()
+	if isStrict { border = lipgloss.DoubleBorder() }
+
+	styleBox := lipgloss.NewStyle().Border(border).BorderForeground(m.theme.Dim).Padding(1)
 	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true).Faint(true)
 
 	height := 5
 	var b strings.Builder
-	b.WriteString(labelStyle.Render("[ NETWORK ACTIVITY ]") + "\n\n")
+	title := "[ NETWORK ACTIVITY ]"
+	if isStrict { title = "[ ACTIVE ATTACK SURFACE ]" }
+	b.WriteString(labelStyle.Render(title) + "\n\n")
 	
 	chartAreaWidth := width - 8
 	for h := height; h > 0; h-- {
@@ -462,8 +424,7 @@ func (m model) renderActivityChart(width int) string {
 		for _, s := range visibleHistory {
 			safeH, alertH := 0, 0
 			if m.maxVal > 0 {
-				safeH = (s.safe * height) / m.maxVal
-				alertH = (s.alerts * height) / m.maxVal
+				safeH, alertH = (s.safe * height) / m.maxVal, (s.alerts * height) / m.maxVal
 			}
 			if h <= alertH { b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Alert).Render("█"))
 			} else if h <= (safeH + alertH) { b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Success).Render("█"))
@@ -482,12 +443,15 @@ func truncateString(s string, l int) string {
 
 func (m model) View() string {
 	if m.width == 0 || m.height == 0 { return "LOADING MISSION CONTROL..." }
-	
 	contentWidth := m.width - 8
-	
+	isStrict := m.engine != nil && m.engine.Mode == "strict"
+
 	// 0. SYSTEM STATUS BAR
 	statusBarS := lipgloss.NewStyle().Background(m.theme.Secondary).Foreground(m.theme.Text).Bold(true).Width(contentWidth)
-	leftPart := lipgloss.NewStyle().Background(m.theme.Primary).Foreground(lipgloss.Color("#000")).Padding(0, 1).Render(" 🛡️  GUARDIANTUI v2.0 ")
+	brandColor := m.theme.Primary
+	if isStrict { brandColor = lipgloss.Color("#ffffff") }
+	
+	leftPart := lipgloss.NewStyle().Background(brandColor).Foreground(lipgloss.Color("#000")).Padding(0, 1).Render(" 🛡️  GUARDIANTUI v2.0 ")
 	midPart := lipgloss.NewStyle().Padding(0, 1).Render(fmt.Sprintf("SYSTEM: %s | ARCH: %s", strings.ToUpper(runtime.GOOS), strings.ToUpper(runtime.GOARCH)))
 	rightPart := lipgloss.NewStyle().Padding(0, 1).Render(time.Now().Format("15:04:05"))
 	spacer := lipgloss.NewStyle().Width(contentWidth - lipgloss.Width(leftPart) - lipgloss.Width(midPart) - lipgloss.Width(rightPart)).Render("")
@@ -496,15 +460,19 @@ func (m model) View() string {
 	// 1. METRICS
 	metrics := m.renderStats(contentWidth)
 
-	// 2. VISUALIZATION
+	// 2. VISUALIZATION (Layout Shift in Strict mode)
 	var viz string
 	showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
 	if showCharts {
-		if m.width >= 110 {
-			chartW := (contentWidth - 2) / 2
-			viz = lipgloss.JoinHorizontal(lipgloss.Top, m.renderActivityChart(chartW), " ", m.renderThreatDistribution(chartW))
+		chartW := (contentWidth - 2) / 2
+		c1, c2 := m.renderActivityChart(chartW), m.renderThreatDistribution(chartW)
+		if isStrict && m.width >= 110 {
+			// In Strict mode, swap positions to prioritize threat vectors on the left
+			viz = lipgloss.JoinHorizontal(lipgloss.Top, c2, " ", c1)
+		} else if m.width >= 110 {
+			viz = lipgloss.JoinHorizontal(lipgloss.Top, c1, " ", c2)
 		} else {
-			viz = lipgloss.JoinVertical(lipgloss.Left, m.renderActivityChart(contentWidth), m.renderThreatDistribution(contentWidth))
+			viz = lipgloss.JoinVertical(lipgloss.Left, c1, c2)
 		}
 	}
 
@@ -520,7 +488,9 @@ func (m model) View() string {
 	}
 
 	// 4. LOG TABLE
-	tableBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Width(contentWidth).Render(m.table.View())
+	tableBorder := lipgloss.RoundedBorder()
+	if isStrict { tableBorder = lipgloss.DoubleBorder() }
+	tableBox := lipgloss.NewStyle().Border(tableBorder).BorderForeground(m.theme.Dim).Width(contentWidth).Render(m.table.View())
 
 	// 5. FOOTER
 	footer := lipgloss.NewStyle().Width(contentWidth).Bold(true).Padding(0, 1)
@@ -529,19 +499,10 @@ func (m model) View() string {
 		footerOut = footer.Background(m.theme.Alert).Foreground(m.theme.Text).Render(" 🚨 LAST THREAT: " + truncateString(m.lastAlert, contentWidth-20))
 	} else {
 		modeStr := "ENFORCING (IPS)"
-		if m.engine != nil && m.engine.Mode == "ids" { modeStr = "MONITORING (IDS)" }
+		if isStrict { modeStr = "AGGRESSIVE DEFENSE (STRICT)" } else if m.engine != nil && m.engine.Mode == "ids" { modeStr = "MONITORING (IDS)" }
 		footerOut = footer.Background(m.theme.Success).Foreground(lipgloss.Color("#000")).Render(" ✨ STATUS: " + modeStr + " | ALL SYSTEMS NOMINAL")
 	}
 
-	// Assemble everything with zero-newline density
-	layout := lipgloss.JoinVertical(lipgloss.Left,
-		statusBar,
-		metrics,
-		viz,
-		termContent,
-		tableBox,
-		footerOut,
-	)
-
+	layout := lipgloss.JoinVertical(lipgloss.Left, statusBar, metrics, viz, termContent, tableBox, footerOut)
 	return lipgloss.NewStyle().Padding(2, 4, 0, 4).Render(layout)
 }
