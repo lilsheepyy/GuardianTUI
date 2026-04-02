@@ -75,9 +75,29 @@ var (
 			Detection: models.Detection{Level: models.LevelHigh, Type: "Path Traversal: App Metadata/Secrets"},
 			Regex:     regexp.MustCompile(`(?i)\.env|\.git\/|\.ssh\/|id_rsa|id_dsa|docker-compose\.yml|config\.php|wp-config\.php|web\.config|appsettings\.json`),
 		},
+	}
+
+	// Advanced XSS (Cross-Site Scripting) Shield
+	xssPatterns = []CompiledDetection{
 		{
-			Detection: models.Detection{Level: models.LevelMedium, Type: "Path Traversal: Process Memory"},
-			Regex:     regexp.MustCompile(`(?i)\/proc\/self\/|\/proc\/net\/|\/var\/log\/`),
+			Detection: models.Detection{Level: models.LevelHigh, Type: "XSS: Script Tag Injection"},
+			Regex:     regexp.MustCompile(`(?i)<script.*?>|&lt;script.*?>|%3cscript.*?>`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelHigh, Type: "XSS: Inline Event Handler"},
+			Regex:     regexp.MustCompile(`(?i)\bon[a-z]+\s*=\s*['"]?.*?['"]?|(?i)\bon[a-z]+\s*=\s*[^\s>]+`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelHigh, Type: "XSS: Pseudo-Protocol"},
+			Regex:     regexp.MustCompile(`(?i)(javascript|data|vbscript|onload|onerror):`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelHigh, Type: "XSS: SVG/XML Vector"},
+			Regex:     regexp.MustCompile(`(?i)<svg.*?onload|(?i)<details.*?ontoggle|(?i)<img.*?onerror|(?i)<iframe.*?src=['"]?javascript:`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelMedium, Type: "XSS: DOM/Global Manipulation"},
+			Regex:     regexp.MustCompile(`(?i)\beval\s*\(|\balert\s*\(|\bconfirm\s*\(|\bprompt\s*\(|\bdocument\.cookie\b|\bwindow\.location\b|\bString\.fromCharCode\b`),
 		},
 	}
 
@@ -94,14 +114,6 @@ var (
 		{
 			Detection: models.Detection{Level: models.LevelCritical, Type: "Exploit: Shellcode Pattern"},
 			Regex:     regexp.MustCompile(`(?i)\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}`),
-		},
-	}
-
-	// XSS & General Web Patterns
-	webPatterns = []CompiledDetection{
-		{
-			Detection: models.Detection{Level: models.LevelHigh, Type: "XSS: Script Injection"},
-			Regex:     regexp.MustCompile(`(?i)<script.*?>|javascript:|on\w+\s*=|alert\s*\(|confirm\s*\(|prompt\s*\(`),
 		},
 	}
 
@@ -146,8 +158,8 @@ func MatchPatterns(input string, maxSize int) *models.Detection {
 		}
 	}
 
-	// 4. Run Path Traversal Checks
-	for _, p := range traversalPatterns {
+	// 4. Run Advanced XSS Checks
+	for _, p := range xssPatterns {
 		if p.Regex.MatchString(input) {
 			d := p.Detection
 			d.Pattern = p.Regex.FindString(input)
@@ -155,8 +167,8 @@ func MatchPatterns(input string, maxSize int) *models.Detection {
 		}
 	}
 
-	// 5. Run General Web Attack Checks
-	for _, p := range webPatterns {
+	// 5. Run Path Traversal Checks
+	for _, p := range traversalPatterns {
 		if p.Regex.MatchString(input) {
 			d := p.Detection
 			d.Pattern = p.Regex.FindString(input)
