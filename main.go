@@ -2,26 +2,48 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"guardiantui/internal/proxy"
-	"guardiantui/internal/tui"
 	"guardiantui/internal/crypto"
+	"guardiantui/internal/proxy"
 	"guardiantui/internal/scanner"
+	"guardiantui/internal/tui"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	bubbletea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/crypto/acme/autocert"
 )
+
+// LogSchema defines the JSON structure for persistent logs
+type LogSchema struct {
+	Timestamp  string            `json:"timestamp"`
+	ID         string            `json:"incident_id"`
+	RemoteIP   string            `json:"remote_ip"`
+	Method     string            `json:"method"`
+	Path       string            `json:"path"`
+	Status     int               `json:"status"`
+	Blocked    bool              `json:"blocked"`
+	Alert      *scanner.Detection `json:"alert,omitempty"`
+	UserAgent  string            `json:"user_agent"`
+	Headers    http.Header       `json:"headers,omitempty"`
+}
 
 func main() {
 	target := flag.String("target", "http://localhost:80", "Target URL to protect")
 	listen := flag.String("listen", ":8080", "Listen address for the proxy")
-	logFile := flag.String("log", "guardian.log", "Path to the log file")
+	
+	// Create logs folder by default
+	logsDir := "logs"
+	os.MkdirAll(logsDir, 0755)
+	defaultLogPath := filepath.Join(logsDir, "guardian.json")
+	
+	logFile := flag.String("log", defaultLogPath, "Path to the log file")
 	configFile := flag.String("config", "config.yaml", "Path to the YAML config file")
 	aiRulesFile := flag.String("ai-rules", "ai.json", "Path to the AI custom rules JSON file")
 	
@@ -47,22 +69,29 @@ func main() {
 	rawLogChan := make(chan proxy.LogEntry, 100)
 	tuiChan := make(chan proxy.LogEntry, 100)
 
-	f, err := os.OpenFile(*logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("Error opening log file: %v\n", err)
-		os.Exit(1)
-	}
-	defer f.Close()
-
+	// Log Worker with Rotation and JSON support
 	go func() {
 		for entry := range rawLogChan {
 			tuiChan <- entry
-			statusStr := "OK"
-			if entry.Alert != nil { statusStr = fmt.Sprintf("ALERT:%s", entry.Alert.Type) }
-			if entry.Blocked { statusStr = "BLOCKED" }
-			logLine := fmt.Sprintf("[%s] ID:%s IP:%s %s %s | Status:%s | Agent:%s\n",
-				entry.Timestamp.Format("2006-01-02 15:04:05"), entry.ID, entry.RemoteIP, entry.Method, entry.Path, statusStr, entry.Agent)
-			f.WriteString(logLine)
+			
+			// 1. Prepare JSON Log Entry
+			schema := LogSchema{
+				Timestamp: entry.Timestamp.Format(time.RFC3339),
+				ID:        entry.ID,
+				RemoteIP:  entry.RemoteIP,
+				Method:    entry.Method,
+				Path:      entry.Path,
+				Status:    entry.Status,
+				Blocked:   entry.Blocked,
+				Alert:     entry.Alert,
+				UserAgent: entry.Agent,
+				Headers:   entry.FullHeaders,
+			}
+			
+			jsonData, _ := json.Marshal(schema)
+			
+			// 2. Persistent Storage with Rotation Check
+			rotateAndWrite(*logFile, jsonData)
 		}
 	}()
 
@@ -99,7 +128,6 @@ func main() {
 		for _, ip := range cfg.Whitelist { engine.AddWhitelist(ip) }
 	}
 
-	// Initial update before starting the ticker
 	engine.UpdateBlocklists()
 	engine.StartAutoUpdate()
 
@@ -108,6 +136,7 @@ func main() {
 		for _, ip := range ips { engine.AddWhitelist(strings.TrimSpace(ip)) }
 	}
 
+	// HTTP/HTTPS Server Launch
 	go func() {
 		if *domain != "" {
 			certManager := autocert.Manager{
@@ -141,17 +170,36 @@ func main() {
 	}()
 
 	if *headless {
-		// Just block forever in headless mode
 		select {}
 	} else {
 		themeName := "cyber"
 		if cfg != nil && cfg.TUI.Theme != "" {
 			themeName = cfg.TUI.Theme
 		}
-		p := tea.NewProgram(tui.NewModel(tuiChan, engine, themeName), tea.WithAltScreen())
+		p := bubbletea.NewProgram(tui.NewModel(tuiChan, engine, themeName), bubbletea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			fmt.Printf("Error starting TUI: %v\n", err)
 			os.Exit(1)
 		}
 	}
+}
+
+// rotateAndWrite handles JSON logging and automatic file rotation
+func rotateAndWrite(filename string, data []byte) {
+	// Max log size: 10MB
+	maxSize := int64(10 * 1024 * 1024)
+	
+	if info, err := os.Stat(filename); err == nil {
+		if info.Size() > maxSize {
+			newName := fmt.Sprintf("%s.%s.bak", filename, time.Now().Format("20060102-150405"))
+			os.Rename(filename, newName)
+		}
+	}
+	
+	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil { return }
+	defer f.Close()
+	
+	f.Write(data)
+	f.WriteString("\n")
 }
