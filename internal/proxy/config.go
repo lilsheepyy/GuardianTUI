@@ -19,6 +19,7 @@ type EngineConfig struct {
 	ProbingThreshold int    `yaml:"probing_threshold_unique"`
 	SpamThreshold    int    `yaml:"spam_threshold_total"`
 	PoWEnabled       bool   `yaml:"pow_enabled"`
+	PoWForce         bool   `yaml:"pow_force"`
 	PoWDifficulty    int    `yaml:"pow_difficulty"`
 }
 

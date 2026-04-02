@@ -128,6 +128,7 @@ type Engine struct {
 	Config          *Config
 	PoW             *pow.System
 	Mode            string // ids, ips, strict
+	PoWForce        bool   // Global override: challenge everyone
 	mu              sync.RWMutex
 }
 
@@ -152,6 +153,7 @@ func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, erro
 		Config:     cfg,
 		PoW:        powSys,
 		Mode:       mode,
+		PoWForce:   cfg != nil && cfg.Engine.PoWForce,
 	}
 
 	e.BlocklistPtr.Store(&BlocklistSnapshot{
@@ -498,11 +500,11 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Transparent PoW Challenge Handling (Only for requests that passed the security scan)
-	if e.PoW != nil && (e.Config.Engine.PoWEnabled || e.Mode == "strict") {
-		// In Strict mode, we are less lenient with Content-Type checks
+	if e.PoW != nil && (e.Config.Engine.PoWEnabled || e.Mode == "strict" || e.PoWForce) {
+		// In Strict or Forced mode, we challenge all GET requests
 		shouldChallenge := r.Method == "GET" && !strings.Contains(r.Header.Get("Accept"), "application/json")
-		if e.Mode == "strict" {
-			shouldChallenge = r.Method == "GET" // Challenge all GETs in strict mode
+		if e.Mode == "strict" || e.PoWForce {
+			shouldChallenge = r.Method == "GET" 
 		}
 
 		if shouldChallenge {

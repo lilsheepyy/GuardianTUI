@@ -222,7 +222,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				val := strings.ToLower(m.searchInput.Value())
 				themeList := []string{"cyber", "forest", "dracula", "monochrome"}
 				modeList := []string{"ips", "ids", "strict"}
-				baseCmds := []string{"search ", "themes set ", "modes set ", "clear", "quit"}
+				baseCmds := []string{"search ", "themes set ", "modes set ", "pow set ", "clear", "quit"}
 				if strings.HasPrefix(val, "themes set ") {
 					m.suggIdx = (m.suggIdx + 1) % len(themeList)
 					m.searchInput.SetValue("themes set " + themeList[m.suggIdx])
@@ -232,6 +232,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if strings.HasPrefix(val, "modes set ") {
 					m.suggIdx = (m.suggIdx + 1) % len(modeList)
 					m.searchInput.SetValue("modes set " + modeList[m.suggIdx])
+					m.searchInput.SetCursor(len(m.searchInput.Value()))
+					return m, nil
+				}
+				if strings.HasPrefix(val, "pow set ") {
+					powOpts := []string{"on", "off"}
+					m.suggIdx = (m.suggIdx + 1) % len(powOpts)
+					m.searchInput.SetValue("pow set " + powOpts[m.suggIdx])
 					m.searchInput.SetCursor(len(m.searchInput.Value()))
 					return m, nil
 				}
@@ -272,6 +279,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								if newMode == "strict" && m.engine.PoW == nil {
 									m.engine.PoW = proxy.NewPoWSystem(4, "")
 								}
+							}
+						}
+					}
+				} else if strings.HasPrefix(strings.ToLower(val), "pow set ") {
+					parts := strings.Split(val, " ")
+					if len(parts) >= 3 {
+						choice := strings.ToLower(parts[2])
+						if m.engine != nil {
+							if choice == "on" {
+								m.engine.PoWForce = true
+								if m.engine.PoW == nil {
+									m.engine.PoW = proxy.NewPoWSystem(4, "")
+								}
+							} else if choice == "off" {
+								m.engine.PoWForce = false
 							}
 						}
 					}
@@ -484,7 +506,9 @@ func (m model) View() string {
 	} else if m.searchInput.Value() != "" {
 		termContent = termBorder.Render(lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true).Render(" 🎯 CMD: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to clear)"))
 	} else {
-		termContent = termBorder.Render(lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] ACTIVATE TERMINAL | TAB TO AUTOCOMPLETE"))
+		helpText := "[/] TERMINAL | [search <query>] | [themes/modes/pow set <val>]"
+		if m.width > 100 { helpText = "[/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [pow set <on/off>] | [tab] AUTOCOMPLETE" }
+		termContent = termBorder.Render(lipgloss.NewStyle().Foreground(m.theme.Dim).Width(contentWidth - 4).Render(helpText))
 	}
 
 	// 4. LOG TABLE
