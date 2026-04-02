@@ -15,56 +15,81 @@ type CompiledDetection struct {
 var (
 	// Advanced SQL Injection Heuristics
 	sqliPatterns = []CompiledDetection{
-		// 1. Tautologies & Logical Bypasses
 		{
 			Detection: models.Detection{Level: models.LevelCritical, Type: "SQLi: Tautology/Logic Bypass"},
 			Regex:     regexp.MustCompile(`(?i)(['"]\s*OR\s*['"]?[^'"]+['"]?\s*=\s*['"]?[^'"]+['"]?)|(\bOR\s+\d+\s*=\s*\d+)|(\bOR\s+TRUE\b)`),
 		},
-		// 2. Union-Based & Join Attacks
 		{
 			Detection: models.Detection{Level: models.LevelCritical, Type: "SQLi: Union/Join Attack"},
 			Regex:     regexp.MustCompile(`(?i)\bUNION\b(\s+ALL)?\s+SELECT\b|\bUNION\b\s*\/\*.*?\*\/|(?i)\bJOIN\b\s+.*?SELECT\b`),
 		},
-		// 3. Time-Based Blind SQLi (All major DBs)
 		{
 			Detection: models.Detection{Level: models.LevelCritical, Type: "SQLi: Time-Based/Blind"},
 			Regex:     regexp.MustCompile(`(?i)pg_sleep\s*\(|benchmark\s*\(|WAITFOR\s+DELAY\b|dbms_lock\.sleep\s*\(|sqlite3_sleep\s*\(|\bsleep\s*\(\s*\d+\s*\)`),
 		},
-		// 4. Error-Based & Subqueries
 		{
 			Detection: models.Detection{Level: models.LevelHigh, Type: "SQLi: Error-Based/Subquery"},
 			Regex:     regexp.MustCompile(`(?i)extractvalue\s*\(|updatexml\s*\(|ST_LatFromGeoHash|ST_LongFromGeoHash|exp\s*\(\s*~\s*0\s*\)|(?i)SELECT\s+.*?\s+FROM\s*\(SELECT\b`),
 		},
-		// 5. System Schema & Fingerprinting
 		{
 			Detection: models.Detection{Level: models.LevelCritical, Type: "SQLi: System Schema Access"},
 			Regex:     regexp.MustCompile(`(?i)\binformation_schema\b|\bsysobjects\b|\bpg_catalog\b|\bsys\.tables\b|\bsqlite_master\b|\bpg_user\b|\bmysql\.user\b`),
 		},
-		// 6. Out-of-Band (OOB) & File Interaction
 		{
 			Detection: models.Detection{Level: models.LevelCritical, Type: "SQLi: OOB/File Interaction"},
 			Regex:     regexp.MustCompile(`(?i)load_file\s*\(|into\s+outfile\b|into\s+dumpfile\b|utl_http\b|http_request\b|xp_cmdshell\b|sys_exec\b`),
 		},
-		// 7. Advanced Obfuscation (Hex/Char)
 		{
 			Detection: models.Detection{Level: models.LevelHigh, Type: "SQLi: Obfuscated Payload"},
 			Regex:     regexp.MustCompile(`(?i)CHAR\s*\(\s*\d+.*?\)|0x[0-9a-fA-F]{4,}|(?i)EXEC\s*\(\s*0x`),
 		},
 	}
 
-	// XSS & General Web Patterns (Recursive normalization handled in scanner)
+	// Advanced Path Traversal Heuristics
+	traversalPatterns = []CompiledDetection{
+		{
+			Detection: models.Detection{Level: models.LevelCritical, Type: "Path Traversal: Direct Bypass"},
+			Regex:     regexp.MustCompile(`(?i)\.\.\/|\.\.\\|%2e%2e%2f|%2e%2e%5c|%252e%252e%252f|%252e%252e%255c`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelCritical, Type: "Path Traversal: Sensitive OS File"},
+			Regex:     regexp.MustCompile(`(?i)\/etc\/(passwd|shadow|group|hosts|hostname|issue|motd)|Windows\/System32|win\.ini|boot\.ini`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelHigh, Type: "Path Traversal: App Metadata/Secrets"},
+			Regex:     regexp.MustCompile(`(?i)\.env|\.git\/|\.ssh\/|id_rsa|id_dsa|docker-compose\.yml|config\.php|wp-config\.php|web\.config|appsettings\.json`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelMedium, Type: "Path Traversal: Process Memory"},
+			Regex:     regexp.MustCompile(`(?i)\/proc\/self\/|\/proc\/net\/|\/var\/log\/`),
+		},
+	}
+
+	// Advanced Buffer Overflow & Shellcode Heuristics
+	overflowPatterns = []CompiledDetection{
+		{
+			Detection: models.Detection{Level: models.LevelCritical, Type: "Exploit: NOP Sled Detected"},
+			Regex:     regexp.MustCompile(`(?i)(\\x90|0x90){8,}|(\x90){8,}`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelHigh, Type: "Exploit: Potential Buffer Overflow"},
+			Regex:     regexp.MustCompile(`(?i)A{128,}|[a-zA-Z0-9]{1024,}|%{10,}[snpx]`),
+		},
+		{
+			Detection: models.Detection{Level: models.LevelCritical, Type: "Exploit: Shellcode Pattern"},
+			Regex:     regexp.MustCompile(`(?i)\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}`),
+		},
+	}
+
+	// XSS & General Web Patterns
 	webPatterns = []CompiledDetection{
 		{
 			Detection: models.Detection{Level: models.LevelHigh, Type: "XSS: Script Injection"},
 			Regex:     regexp.MustCompile(`(?i)<script.*?>|javascript:|on\w+\s*=|alert\s*\(|confirm\s*\(|prompt\s*\(`),
 		},
 		{
-			Detection: models.Detection{Level: models.LevelMedium, Type: "Path Traversal"},
-			Regex:     regexp.MustCompile(`(?i)\.\.\/|\.\.\\|%2e%2e%2f|%2e%2e%5c|/etc/passwd|/windows/win\.ini`),
-		},
-		{
 			Detection: models.Detection{Level: models.LevelHigh, Type: "Command Injection"},
-			Regex:     regexp.MustCompile(`(?i);\s*rm\s+-|\|\s*bash\b|;\s*cat\s+|&\s*powershell\b`),
+			Regex:     regexp.MustCompile(`(?i);\s*rm\s+-|\|\s*bash\b|;\s*cat\s+|&\s*powershell\b|;\s*nc\s+`),
 		},
 	}
 
@@ -82,7 +107,16 @@ func MatchPatterns(input string, maxSize int) *models.Detection {
 		input = input[:maxSize]
 	}
 
-	// 1. Run Advanced SQLi Checks First
+	// 1. Run Buffer Overflow / Exploit Checks (High Priority)
+	for _, p := range overflowPatterns {
+		if p.Regex.MatchString(input) {
+			d := p.Detection
+			d.Pattern = p.Regex.FindString(input)
+			return &d
+		}
+	}
+
+	// 2. Run Advanced SQLi Checks
 	for _, p := range sqliPatterns {
 		if p.Regex.MatchString(input) {
 			d := p.Detection
@@ -91,7 +125,16 @@ func MatchPatterns(input string, maxSize int) *models.Detection {
 		}
 	}
 
-	// 2. Run General Web Attack Checks
+	// 3. Run Path Traversal Checks
+	for _, p := range traversalPatterns {
+		if p.Regex.MatchString(input) {
+			d := p.Detection
+			d.Pattern = p.Regex.FindString(input)
+			return &d
+		}
+	}
+
+	// 4. Run General Web Attack Checks
 	for _, p := range webPatterns {
 		if p.Regex.MatchString(input) {
 			d := p.Detection
