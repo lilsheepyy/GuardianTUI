@@ -365,15 +365,21 @@ func (e *Engine) IsIPBlockedBySubnet(ip net.IP, parsedStr string) bool {
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Discover Real Client IP (Prioritizing Cloudflare and Proxies)
-	remoteIPStr := r.Header.Get("CF-Connecting-IP")
-	if remoteIPStr == "" {
-		xff := r.Header.Get("X-Forwarded-For")
-		if xff != "" {
-			parts := strings.Split(xff, ",")
-			remoteIPStr = strings.TrimSpace(parts[0])
-		}
+	incidentID := uuid.New().String()[:8]
+
+	// --- Unauthorized Proxy Shield ---
+	// We strictly prohibit X-Forwarded-For to prevent proxy-looping and IP spoofing.
+	if r.Header.Get("X-Forwarded-For") != "" {
+		e.serveBlockPage(w, incidentID, r.RemoteAddr, r, &scanner.Detection{
+			Type:    "Unauthorized Proxy Attempt",
+			Pattern: "X-Forwarded-For Header Present",
+			Level:   scanner.LevelCritical,
+		}, false)
+		return
 	}
+
+	// Discover Real Client IP (Cloudflare Trusted)
+	remoteIPStr := r.Header.Get("CF-Connecting-IP")
 	if remoteIPStr == "" {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err == nil {
@@ -384,7 +390,6 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	parsedIP := net.ParseIP(remoteIPStr)
-	incidentID := uuid.New().String()[:8]
 
 	// Determine if this is an AI endpoint
 	isAI := false
