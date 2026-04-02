@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"fmt"
 	"strings"
 
 	"guardiantui/internal/scanner/ai"
@@ -40,6 +41,18 @@ func Scan(params ScanParams) *Detection {
 	normPath := utils.Normalize(params.Path)
 	normQuery := utils.Normalize(params.Query)
 	normBody := utils.Normalize(params.Body)
+
+	// 0. High-Entropy Shield (Detect Encrypted/Packed payloads)
+	if len(params.Body) > 64 {
+		entropy := utils.CalculateEntropy(params.Body)
+		if entropy > 5.8 {
+			return &Detection{
+				Pattern: fmt.Sprintf("Entropy: %.2f", entropy),
+				Level:   LevelHigh,
+				Type:    "Suspicious: High-Entropy Payload (Likely Encrypted/Packed)",
+			}
+		}
+	}
 
 	// 1. ZERO TOLERANCE: CSAM SHIELD
 	// High-priority heuristic check across all request components
