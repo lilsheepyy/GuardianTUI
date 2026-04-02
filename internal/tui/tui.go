@@ -3,7 +3,7 @@ package tui
 import (
 	"fmt"
 	"guardiantui/internal/proxy"
-	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -16,60 +16,60 @@ import (
 
 // Theme defines the color palette for the TUI
 type Theme struct {
-	Name         string
-	Primary      lipgloss.Color
-	Secondary    lipgloss.Color
-	Accent       lipgloss.Color
-	Alert        lipgloss.Color
-	Success      lipgloss.Color
-	Text         lipgloss.Color
-	Dim          lipgloss.Color
-	Background   lipgloss.Color
+	Name       string
+	Primary    lipgloss.Color
+	Secondary  lipgloss.Color
+	Accent     lipgloss.Color
+	Alert      lipgloss.Color
+	Success    lipgloss.Color
+	Text       lipgloss.Color
+	Dim        lipgloss.Color
+	Background lipgloss.Color
 }
 
 var themes = map[string]Theme{
 	"cyber": {
-		Name:      "Cyber",
-		Primary:   lipgloss.Color("#00f2ff"),
-		Secondary: lipgloss.Color("#252a34"),
-		Accent:    lipgloss.Color("#08d9d6"),
-		Alert:     lipgloss.Color("#ff2e63"),
-		Success:   lipgloss.Color("#08ffc8"),
-		Text:      lipgloss.Color("#eaeaea"),
-		Dim:       lipgloss.Color("#393e46"),
+		Name:       "Cyber",
+		Primary:    lipgloss.Color("#00f2ff"),
+		Secondary:  lipgloss.Color("#252a34"),
+		Accent:     lipgloss.Color("#08d9d6"),
+		Alert:      lipgloss.Color("#ff2e63"),
+		Success:    lipgloss.Color("#08ffc8"),
+		Text:       lipgloss.Color("#eaeaea"),
+		Dim:        lipgloss.Color("#393e46"),
 		Background: lipgloss.Color("#1a1a1a"),
 	},
 	"forest": {
-		Name:      "Forest",
-		Primary:   lipgloss.Color("#a2d076"),
-		Secondary: lipgloss.Color("#2d3319"),
-		Accent:    lipgloss.Color("#6fb98f"),
-		Alert:     lipgloss.Color("#e27d60"),
-		Success:   lipgloss.Color("#85cdca"),
-		Text:      lipgloss.Color("#f1f1f1"),
-		Dim:       lipgloss.Color("#4d5d53"),
+		Name:       "Forest",
+		Primary:    lipgloss.Color("#a2d076"),
+		Secondary:  lipgloss.Color("#2d3319"),
+		Accent:     lipgloss.Color("#6fb98f"),
+		Alert:      lipgloss.Color("#e27d60"),
+		Success:    lipgloss.Color("#85cdca"),
+		Text:       lipgloss.Color("#f1f1f1"),
+		Dim:        lipgloss.Color("#4d5d53"),
 		Background: lipgloss.Color("#1e241e"),
 	},
 	"dracula": {
-		Name:      "Dracula",
-		Primary:   lipgloss.Color("#bd93f9"),
-		Secondary: lipgloss.Color("#282a36"),
-		Accent:    lipgloss.Color("#ff79c6"),
-		Alert:     lipgloss.Color("#ff5555"),
-		Success:   lipgloss.Color("#50fa7b"),
-		Text:      lipgloss.Color("#f8f8f2"),
-		Dim:       lipgloss.Color("#6272a4"),
+		Name:       "Dracula",
+		Primary:    lipgloss.Color("#bd93f9"),
+		Secondary:  lipgloss.Color("#282a36"),
+		Accent:     lipgloss.Color("#ff79c6"),
+		Alert:      lipgloss.Color("#ff5555"),
+		Success:    lipgloss.Color("#50fa7b"),
+		Text:       lipgloss.Color("#f8f8f2"),
+		Dim:        lipgloss.Color("#6272a4"),
 		Background: lipgloss.Color("#282a36"),
 	},
 	"monochrome": {
-		Name:      "Monochrome",
-		Primary:   lipgloss.Color("#ffffff"),
-		Secondary: lipgloss.Color("#111111"),
-		Accent:    lipgloss.Color("#aaaaaa"),
-		Alert:     lipgloss.Color("#cccccc"),
-		Success:   lipgloss.Color("#eeeeee"),
-		Text:      lipgloss.Color("#ffffff"),
-		Dim:       lipgloss.Color("#333333"),
+		Name:       "Monochrome",
+		Primary:    lipgloss.Color("#ffffff"),
+		Secondary:  lipgloss.Color("#111111"),
+		Accent:     lipgloss.Color("#aaaaaa"),
+		Alert:      lipgloss.Color("#cccccc"),
+		Success:    lipgloss.Color("#eeeeee"),
+		Text:       lipgloss.Color("#ffffff"),
+		Dim:        lipgloss.Color("#333333"),
 		Background: lipgloss.Color("#000000"),
 	},
 }
@@ -112,7 +112,6 @@ func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName strin
 		theme = themes["cyber"]
 	}
 
-	// Placeholder columns, will be resized on first WindowSizeMsg
 	columns := []table.Column{
 		{Title: "ID", Width: 6},
 		{Title: "TIME", Width: 9},
@@ -124,7 +123,7 @@ func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName strin
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithFocused(true),
-		table.WithHeight(15),
+		table.WithHeight(10),
 	)
 
 	s := table.DefaultStyles()
@@ -141,10 +140,10 @@ func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName strin
 	t.SetStyles(s)
 
 	ti := textinput.New()
-	ti.Placeholder = "Enter command (e.g. search 1.2.3.4)"
-	ti.CharLimit = 50
-	ti.Width = 40
-	ti.Prompt = " TERMINAL > "
+	ti.Placeholder = "Enter command (search, themes set, modes set, clear, quit)"
+	ti.CharLimit = 100
+	ti.Width = 60
+	ti.Prompt = " ❯ "
 
 	return model{
 		table:       t,
@@ -189,39 +188,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Dynamic reserved height calculation based on TP(4) + StatusBar(1) + NL(1) + Header(1) + NL(1) + Stats(4) + Terminal(2) + Footer(1)
-		reservedHeight := 15
+		// PRECISION CALCULATIONS FOR "WAY BETTER" LOOK
+		// Header(1) + Padding(2) + Stats(5) + Charts(10) + Command(3) + Footer(1) = 22 rows reserved
+		reservedHeight := 14
 		showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
-
+		
 		if showCharts {
 			if m.width >= 110 {
-				reservedHeight += 9 // Side-by-side charts (height 8 + 1 newline)
+				reservedHeight += 10
 			} else {
-				reservedHeight += 17 // Stacked charts (height 8+8 + 1 newline)
+				reservedHeight += 18
 			}
 		}
-
-		newHeight := m.height - reservedHeight
-		if newHeight < 4 {
-			newHeight = 4
-		}
+		
+		newHeight := m.height - reservedHeight - 4 // Padding
+		if newHeight < 4 { newHeight = 4 }
 		m.table.SetHeight(newHeight)
 
-		// Dynamic column widths
 		idW, timeW, ipW, statusW := 8, 10, 16, 30
 		if m.width < 100 {
 			idW, timeW, ipW, statusW = 6, 9, 15, 20
 		}
 
-		totalWidth := m.width - 10 
+		totalWidth := m.width - 12
 		pathW := totalWidth - idW - timeW - ipW - statusW
-		if pathW < 10 {
-			pathW = 10
-		}
+		if pathW < 10 { pathW = 10 }
 
 		m.table.SetColumns([]table.Column{
-			{Title: "ID", Width: idW}, {Title: "TIME", Width: timeW},
-			{Title: "SOURCE IP", Width: ipW}, {Title: "SECURITY STATUS", Width: statusW},
+			{Title: "ID", Width: idW},
+			{Title: "TIME", Width: timeW},
+			{Title: "SOURCE IP", Width: ipW},
+			{Title: "SECURITY STATUS", Width: statusW},
 			{Title: "REQUEST PATH", Width: pathW},
 		})
 
@@ -396,79 +393,74 @@ func (m *model) updateTable() {
 	if !isSearch { m.table.GotoBottom() }
 }
 
-func (m model) renderStats() string {
-	styleBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
-	styleStatLabel := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
-	styleStatValue := lipgloss.NewStyle().Foreground(m.theme.Primary)
-	styleAlert := lipgloss.NewStyle().Foreground(m.theme.Alert).Bold(true)
+func (m model) renderStats(width int) string {
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Dim).
+		Padding(0, 1).
+		Align(lipgloss.Center)
 
-	uptime := time.Since(m.startTime).Round(time.Second)
-	s1 := lipgloss.JoinVertical(lipgloss.Left, styleStatLabel.Render("UPTIME"), styleStatValue.Render(uptime.String()))
-	s2 := lipgloss.JoinVertical(lipgloss.Left, styleStatLabel.Render("TOTAL REQUESTS"), styleStatValue.Render(fmt.Sprintf("%d", m.totalRequests)))
-	s3 := lipgloss.JoinVertical(lipgloss.Left, styleStatLabel.Render("IPS BLOCKS"), styleAlert.Render(fmt.Sprintf("%d", m.totalBlocks)))
-	s4 := lipgloss.JoinVertical(lipgloss.Left, styleStatLabel.Render("LIVE RPS"), styleStatValue.Render(fmt.Sprintf("%d req/s", m.activeRequests)))
+	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Faint(true).Bold(true)
+	valueStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
+	alertStyle := lipgloss.NewStyle().Foreground(m.theme.Alert).Bold(true)
 
-	boxWidth := (m.width - 16) / 4
-	if boxWidth < 15 { boxWidth = 15 }
-	if boxWidth > 25 { boxWidth = 25 }
+	uptime := time.Since(m.startTime).Round(time.Second).String()
+	
+	cardWidth := (width - 6) / 4
+	if cardWidth < 12 { cardWidth = 12 }
 
-	row := lipgloss.JoinHorizontal(lipgloss.Top,
-		styleBox.Width(boxWidth).Render(s1), lipgloss.NewStyle().Width(1).Render(" "),
-		styleBox.Width(boxWidth).Render(s2), lipgloss.NewStyle().Width(1).Render(" "),
-		styleBox.Width(boxWidth).Render(s3), lipgloss.NewStyle().Width(1).Render(" "),
-		styleBox.Width(boxWidth).Render(s4),
-	)
-	if m.width < 80 {
-		row = lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s1), lipgloss.NewStyle().Width(1).Render(" "), styleBox.Width(boxWidth).Render(s2)),
-			lipgloss.JoinHorizontal(lipgloss.Top, styleBox.Width(boxWidth).Render(s3), lipgloss.NewStyle().Width(1).Render(" "), styleBox.Width(boxWidth).Render(s4)),
-		)
-	}
-	return lipgloss.PlaceHorizontal(m.width-8, lipgloss.Center, row)
+	c1 := boxStyle.Width(cardWidth).Render(lipgloss.JoinVertical(lipgloss.Center, labelStyle.Render("UPTIME"), valueStyle.Render(uptime)))
+	c2 := boxStyle.Width(cardWidth).Render(lipgloss.JoinVertical(lipgloss.Center, labelStyle.Render("REQUESTS"), valueStyle.Render(fmt.Sprintf("%d", m.totalRequests))))
+	c3 := boxStyle.Width(cardWidth).Render(lipgloss.JoinVertical(lipgloss.Center, labelStyle.Render("BLOCKED"), alertStyle.Render(fmt.Sprintf("%d", m.totalBlocks))))
+	c4 := boxStyle.Width(cardWidth).Render(lipgloss.JoinVertical(lipgloss.Center, labelStyle.Render("LIVE RPS"), valueStyle.Render(fmt.Sprintf("%d", m.activeRequests))))
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, c1, " ", c2, " ", c3, " ", c4)
 }
 
-func (m model) renderThreatDistribution() string {
-	styleStatLabel := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
-	styleBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
-	styleAlert := lipgloss.NewStyle().Foreground(m.theme.Alert).Bold(true)
+func (m model) renderThreatDistribution(width int) string {
+	styleBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
+	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
 
 	var b strings.Builder
-	b.WriteString(styleStatLabel.Render("THREAT DISTRIBUTION") + "\n\n")
+	b.WriteString(labelStyle.Render("🛡️  THREAT VECTORS") + "\n\n")
+	
 	type kv struct { Key string; Value int }
 	var ss []kv
 	for k, v := range m.threatTypes { ss = append(ss, kv{k, v}) }
 	sort.Slice(ss, func(i, j int) bool { return ss[i].Value > ss[j].Value })
 
-	if len(ss) == 0 { b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Dim).Render("No threats detected yet.")) }
+	if len(ss) == 0 {
+		b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Dim).Render("CLEAN TRAFFIC ONLY"))
+	}
 	for i, kv := range ss {
 		if i >= 4 { break }
 		percent := 0.0
 		if m.totalBlocks > 0 { percent = (float64(kv.Value) / float64(m.totalBlocks)) * 100 }
-		barWidth := int(percent / 10)
-		bar := styleAlert.Render(strings.Repeat("█", barWidth))
-		b.WriteString(fmt.Sprintf("%-18s %s %3.0f%%\n", truncateString(kv.Key, 18), bar, percent))
+		barWidth := int((float64(width-20) * percent) / 100)
+		if barWidth < 1 && percent > 0 { barWidth = 1 }
+		bar := lipgloss.NewStyle().Foreground(m.theme.Alert).Render(strings.Repeat("█", barWidth))
+		b.WriteString(fmt.Sprintf("%-14s %s %3.0f%%\n", truncateString(kv.Key, 14), bar, percent))
 	}
-	distWidth := 45
-	if m.width < 110 { distWidth = m.width - 14 }
-	return styleBox.Width(distWidth).Height(8).Render(b.String())
+	return styleBox.Width(width).Height(8).Render(b.String())
 }
 
-func (m model) renderActivityChart() string {
-	styleStatLabel := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
-	styleBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
-	height := 5
-	chartWidth := 60
-	if m.width < 110 { chartWidth = m.width - 24 }
-	if chartWidth < 20 { chartWidth = 20 }
+func (m model) renderActivityChart(width int) string {
+	styleBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1)
+	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
 
+	height := 5
 	var b strings.Builder
-	b.WriteString(styleStatLabel.Render("LIVE SECURITY TRAFFIC (60s)") + "\n\n")
+	b.WriteString(labelStyle.Render("📈 NETWORK ACTIVITY") + "\n\n")
+	
+	chartAreaWidth := width - 8
 	for h := height; h > 0; h-- {
 		axisVal := 0
 		if m.maxVal > 0 { axisVal = h * (m.maxVal / height) }
-		b.WriteString(fmt.Sprintf("%3d ", axisVal))
+		b.WriteString(fmt.Sprintf("%2d ", axisVal))
+		
 		visibleHistory := m.history
-		if len(m.history) > chartWidth { visibleHistory = m.history[len(m.history)-chartWidth:] }
+		if len(m.history) > chartAreaWidth { visibleHistory = m.history[len(m.history)-chartAreaWidth:] }
+		
 		for _, s := range visibleHistory {
 			safeH, alertH := 0, 0
 			if m.maxVal > 0 {
@@ -481,98 +473,90 @@ func (m model) renderActivityChart() string {
 		}
 		b.WriteString("\n")
 	}
-	return styleBox.Width(chartWidth + 10).Height(8).Render(b.String())
+	return styleBox.Width(width).Height(8).Render(b.String())
 }
 
 func truncateString(s string, l int) string {
 	if len(s) <= l { return s }
-	if l <= 1 { return "…" }
+	if l <= 3 { return "..." }
 	return s[:l-1] + "…"
 }
 
 func (m model) View() string {
-	if m.width == 0 || m.height == 0 { return "Initializing Dashboard..." }
-	contentWidth := m.width - 4
-
-	// 0. Top Branding & Status Bar
-	hostname, _ := os.Hostname()
-	brandStyle := lipgloss.NewStyle().
-		Background(m.theme.Primary).
-		Foreground(lipgloss.Color("#000")).
-		Bold(true).
-		Padding(0, 1)
+	if m.width == 0 || m.height == 0 { return "LOADING MISSION CONTROL..." }
 	
-	statusStyle := lipgloss.NewStyle().
-		Background(m.theme.Dim).
+	// Set up base styles
+	contentWidth := m.width - 8
+	
+	// 0. SYSTEM STATUS BAR (Topmost)
+	statusBarS := lipgloss.NewStyle().
+		Background(m.theme.Secondary).
 		Foreground(m.theme.Text).
-		Padding(0, 1)
-
-	brandPart := brandStyle.Render("🛡️  GUARDIANTUI v2.0")
-	modePart := statusStyle.Render(" MODE: " + strings.ToUpper(m.engine.Mode) + " ")
-	hostPart := statusStyle.Faint(true).Render(" " + hostname + " ")
-	timePart := statusStyle.Render(" " + time.Now().Format("15:04:05") + " ")
-	
-	// Flexible spacer
-	spacerWidth := contentWidth - lipgloss.Width(brandPart) - lipgloss.Width(modePart) - lipgloss.Width(hostPart) - lipgloss.Width(timePart)
-	if spacerWidth < 0 { spacerWidth = 0 }
-	spacer := lipgloss.NewStyle().Width(spacerWidth).Background(m.theme.Dim).Render("")
-
-	statusBar := lipgloss.JoinHorizontal(lipgloss.Top,
-		brandPart,
-		modePart,
-		spacer,
-		hostPart,
-		timePart,
-	)
-
-	// 1. Sub-Header Section (Centered Theme/Status Info)
-	headerStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Primary).
 		Bold(true).
-		Width(contentWidth).
-		Align(lipgloss.Center)
+		Width(contentWidth)
 	
-	header := headerStyle.Render("L7 INTRUSION PREVENTION SYSTEM | ACTIVE MONITORING")
+	leftPart := lipgloss.NewStyle().Background(m.theme.Primary).Foreground(lipgloss.Color("#000")).Padding(0, 1).Render(" 🛡️  GUARDIANTUI v2.0 ")
+	midPart := lipgloss.NewStyle().Padding(0, 1).Render(fmt.Sprintf("SYSTEM: %s | CPU: %s", strings.ToUpper(runtime.GOOS), strings.ToUpper(runtime.GOARCH)))
+	rightPart := lipgloss.NewStyle().Padding(0, 1).Render(time.Now().Format("15:04:05"))
+	
+	spacer := lipgloss.NewStyle().Width(contentWidth - lipgloss.Width(leftPart) - lipgloss.Width(midPart) - lipgloss.Width(rightPart)).Render("")
+	statusBar := statusBarS.Render(lipgloss.JoinHorizontal(lipgloss.Top, leftPart, midPart, spacer, rightPart))
 
-	// 2. Stats Section
-	statsRow := m.renderStats()
+	// 1. METRICS ROW
+	metrics := m.renderStats(contentWidth)
 
-	// 3. Visualization Section
-	var vizRow string
+	// 2. VISUALIZATION ROW
+	var viz string
 	showCharts := m.height >= 35 || (m.height >= 28 && m.width >= 110)
 	if showCharts {
 		if m.width >= 110 {
-			vizRow = lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, lipgloss.JoinHorizontal(lipgloss.Top, m.renderActivityChart(), lipgloss.NewStyle().Width(2).Render(" "), m.renderThreatDistribution()))
+			chartW := (contentWidth - 2) / 2
+			viz = lipgloss.JoinHorizontal(lipgloss.Top, m.renderActivityChart(chartW), " ", m.renderThreatDistribution(chartW))
 		} else {
-			vizRow = lipgloss.PlaceHorizontal(contentWidth, lipgloss.Center, lipgloss.JoinVertical(lipgloss.Center, m.renderActivityChart(), m.renderThreatDistribution()))
+			viz = lipgloss.JoinVertical(lipgloss.Left, m.renderActivityChart(contentWidth), m.renderThreatDistribution(contentWidth))
 		}
-		vizRow += "\n"
 	}
 
-	// 4. Command Area
-	termStyle := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, true, false).BorderForeground(m.theme.Dim).Width(contentWidth - 2).Padding(0, 1)
-	var cmdArea string
-	if m.searching { cmdArea = termStyle.BorderForeground(m.theme.Primary).Render(m.searchInput.View())
+	// 3. TERMINAL/COMMAND AREA
+	termBorder := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, true, false).BorderForeground(m.theme.Dim).Width(contentWidth)
+	var termContent string
+	if m.searching {
+		termContent = termBorder.BorderForeground(m.theme.Primary).Render(m.searchInput.View())
 	} else if m.searchInput.Value() != "" {
-		cmdArea = termStyle.Render(lipgloss.NewStyle().Foreground(m.theme.Primary).Italic(true).Render("🎯 FILTERED: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to clear)"))
+		termContent = termBorder.Render(lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true).Render(" 🎯 CMD: ") + m.searchInput.Value())
 	} else {
-		helpText := "[/] TERMINAL | [search <query>] | [themes/modes set <val>]"
-		if m.width > 100 { helpText = "[/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [tab] AUTOCOMPLETE" }
-		cmdArea = termStyle.Render(lipgloss.NewStyle().Foreground(m.theme.Dim).Width(contentWidth - 4).Render(helpText))
+		termContent = termBorder.Render(lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [/] ACTIVATE TERMINAL | TAB TO AUTOCOMPLETE"))
 	}
 
-	// 5. Main Table Area
-	tableBox := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(0).MarginTop(1).Width(contentWidth).Render(m.table.View())
+	// 4. LOG TABLE
+	tableBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Dim).
+		Width(contentWidth).
+		Render(m.table.View())
 
-	// 6. Status Footer
-	footerStyle := lipgloss.NewStyle().Bold(true).Padding(0, 1).Width(contentWidth)
-	var statusLine string
+	// 5. FOOTER / ALERTS
+	footer := lipgloss.NewStyle().Width(contentWidth).Bold(true).Padding(0, 1)
+	var footerOut string
 	if m.lastAlert != "" {
-		statusLine = footerStyle.Background(m.theme.Alert).Foreground(m.theme.Text).Render(" 🚨 CRITICAL: " + truncateString(m.lastAlert, contentWidth-10))
+		footerOut = footer.Background(m.theme.Alert).Foreground(m.theme.Text).Render(" 🚨 LAST THREAT: " + truncateString(m.lastAlert, contentWidth-20))
 	} else {
-		statusLine = footerStyle.Background(m.theme.Success).Foreground(lipgloss.Color("#000")).Render(" ✨ MONITORING ACTIVE" + truncateString(" - ALL SYSTEMS NOMINAL", contentWidth-25))
+		modeStr := "ENFORCING (IPS)"
+		if m.engine != nil && m.engine.Mode == "ids" { modeStr = "MONITORING (IDS)" }
+		footerOut = footer.Background(m.theme.Success).Foreground(lipgloss.Color("#000")).Render(" ✨ STATUS: " + modeStr + " | NO ACTIVE INCIDENTS")
 	}
 
-	mainContent := lipgloss.JoinVertical(lipgloss.Left, statusBar, "\n", header, "\n", lipgloss.NewStyle().Padding(0, 2).Render(lipgloss.JoinVertical(lipgloss.Left, statsRow, vizRow, cmdArea, tableBox)), statusLine)
-	return lipgloss.NewStyle().Padding(4, 2, 0, 2).Render(mainContent)
+	// Final Assembly with precise vertical spacing
+	layout := lipgloss.JoinVertical(lipgloss.Left,
+		statusBar,
+		"\n",
+		metrics,
+		"\n",
+		viz,
+		termContent,
+		tableBox,
+		footerOut,
+	)
+
+	return lipgloss.NewStyle().Padding(2, 4).Render(layout)
 }
