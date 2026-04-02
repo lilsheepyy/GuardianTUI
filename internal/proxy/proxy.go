@@ -365,8 +365,23 @@ func (e *Engine) IsIPBlockedBySubnet(ip net.IP, parsedStr string) bool {
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	remoteIPStr, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil { remoteIPStr = r.RemoteAddr }
+	// Discover Real Client IP (Prioritizing Cloudflare and Proxies)
+	remoteIPStr := r.Header.Get("CF-Connecting-IP")
+	if remoteIPStr == "" {
+		xff := r.Header.Get("X-Forwarded-For")
+		if xff != "" {
+			parts := strings.Split(xff, ",")
+			remoteIPStr = strings.TrimSpace(parts[0])
+		}
+	}
+	if remoteIPStr == "" {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err == nil {
+			remoteIPStr = host
+		} else {
+			remoteIPStr = r.RemoteAddr
+		}
+	}
 	
 	parsedIP := net.ParseIP(remoteIPStr)
 	incidentID := uuid.New().String()[:8]
