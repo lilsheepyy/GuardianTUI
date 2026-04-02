@@ -42,6 +42,8 @@ Your application is now filtered and accessible via `http://localhost:8080`.
 - **Lock-Free Snapshots**: Atomic pointer swapping for zero-latency security updates.
 - **Deep Packet Inspection**: Recursive normalization (Base64, Hex, URL, HTML) of payloads.
 - **Advanced AI Shield**: Heuristic scoring specifically optimized for LLM/AI endpoints.
+- **Enterprise Logging**: Persistent JSON logging with automatic 10MB file rotation in the `logs/` folder.
+- **Network Hardening**: Integrated Cloudflare (`CF-Connecting-IP`) support and a strict Unauthorized Proxy Shield.
 - **DLP Engine**: Inbound file protection and outbound secret redaction.
 - **v2.0 Dashboard**: Modern, responsive TUI with traffic heatmaps and threat distribution charts.
 - **Dynamic Operational Modes**: Switch between `IPS` (Active), `IDS` (Passive/Logging), and `Strict` modes via configuration or TUI.

@@ -1,50 +1,43 @@
 # 🏛️ GuardianTUI Architecture & Internals
 
-GuardianTUI is engineered for ultra-high performance and extreme reliability in high-traffic environments. This document explains the core architectural decisions that allow it to process thousands of requests per second while maintaining deep packet inspection.
+GuardianTUI is engineered for ultra-high performance and multi-layered defense in high-traffic environments.
 
 ---
 
 ## 🚀 High-Performance Sharding
-
-To eliminate lock contention (a common bottleneck in Go applications with high concurrency), GuardianTUI employs **64-way memory sharding**.
-
-- **ShardedIPMap**: Instead of a single `sync.Map` or a generic map with a global mutex, we partition the key space into 64 distinct "shards," each with its own `sync.RWMutex`.
-- **Bot Probing Memory**: The same sharding logic is used to track the behavioral history of suspicious IPs, ensuring that thousands of simultaneous bot probes don't slow down legitimate traffic.
+- **ShardedIPMap**: Employs **64-way memory sharding** for IP tracking and bot detection to eliminate lock contention on high-concurrency servers.
 
 ---
 
 ## ⚡ Lock-Free Security Snapshots
-
-Security policies (Whitelists, Blocked Subnets, and Exact IP lists) are updated frequently by the background sync workers.
-
-- **`atomic.Pointer` Usage**: When blocklists are updated (every 60s), the engine builds the new structures in a separate memory space. Once ready, it uses an atomic pointer swap to replace the active security snapshot.
-- **Zero-Latency Lookups**: This design allows the request-handling hot-path to read the current security policy without ever acquiring a write lock, even during a heavy update cycle.
+- **`atomic.Pointer`**: Policies (Whitelists, Subnets) are managed via atomic snapshots, allowing zero-latency lookups during active traffic filtering without acquiring global read-locks.
 
 ---
 
-## 🔄 Recursive Normalization Engine
-
-Attackers often use obfuscation to bypass IPS signatures. GuardianTUI's `utils.Normalize` function recursively decodes up to 3 layers of encoding:
-
-1.  **URL Encoding** (e.g., `%27` -> `'`)
-2.  **Double URL Encoding** (e.g., `%2527` -> `%27` -> `'`)
-3.  **HTML Entity Encoding** (e.g., `&#x27;` -> `'`)
-4.  **Base64/Hex Strings**: Identifies and decodes potential malicious payloads hidden in encoded strings.
-
----
-
-## 🛡️ Transparent Proof of Work (PoW)
-
-Against massive HTTP floods (DDoS), the engine employs a "Proof of Work" challenge.
-
-- **Client-Side Cryptography**: When the PoW challenge is enabled, suspicious or high-frequency visitors are served an invisible JavaScript challenge.
-- **Verification**: The client must solve a small cryptographic puzzle before their request is forwarded to the backend. This stops simple bots instantly while remaining invisible to real users.
+## 🔄 Recursive Normalization & Anti-Obfuscation
+Attackers often use obfuscation to bypass IPS signatures. GuardianTUI recursively decodes up to **4 layers** of encoding:
+1.  **URL & Double URL Encoding**
+2.  **HTML Entity Encoding**
+3.  **Unicode Escape** (`\uXXXX`)
+4.  **Hex Escape** (`\xHH` or `0x...`)
+5.  **Base64 Strings**
 
 ---
 
-## 🌐 Secure Reverse Proxy Logic
+## 🧠 Entropy Analysis (Anti-Encryption)
+GuardianTUI calculates the **Shannon Entropy** of incoming payloads to identify data that is "too random."
+- **Detection**: High entropy (above 5.8) is flagged as potentially encrypted shellcode, packed malware, or binary exploits.
+- **Zero-Day Resilience**: This allows the engine to block unknown encrypted attacks that don't match existing signatures.
 
-GuardianTUI acts as an L7 gateway. It manages:
-- **TLS Termination**: Support for real Let's Encrypt certificates (via `autocert`) or self-signed certificates for local development.
-- **Identification & Traceability**: Injects unique headers (`X-Protected-By`, `Via`) and cookies (`guardianTUI`) for downstream verification.
-- **Payload Capture**: Buffers the request body for inspection only up to the `max_scan_size_bytes`, ensuring that large uploads don't consume excessive memory.
+---
+
+## 🌐 Network Hardening
+- **Cloudflare Integration**: Prioritizes `CF-Connecting-IP` to identify real visitors behind the Cloudflare edge.
+- **Unauthorized Proxy Shield**: Explicitly blocks requests containing the `X-Forwarded-For` header to prevent IP spoofing and unauthorized proxy-looping.
+
+---
+
+## 📝 Enterprise Logging Suite
+- **Persistent JSON**: All events are saved in a structured JSON format for easy ingestion by ELK, Splunk, or custom SIEMs.
+- **Auto-Rotation**: The system monitors the log file and automatically rotates it at **10MB** to protect disk space.
+- **Default Storage**: Logs are securely stored in the dedicated `logs/` directory.
