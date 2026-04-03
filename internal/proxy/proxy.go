@@ -338,19 +338,41 @@ func (e *Engine) UpdateBlocklists() {
 
 	// 2. Process remote blocklists
 	client := &http.Client{Timeout: 30 * time.Second}
-	for _, url := range e.Config.RemoteBlocklists {
-		resp, err := client.Get(url)
+	for _, remoteURL := range e.Config.RemoteBlocklists {
+		resp, err := client.Get(remoteURL)
 		if err != nil { continue }
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil { continue }
 
 		name := "list.txt"
-		lowURL := strings.ToLower(url)
-		if strings.Contains(lowURL, "spamhaus") { name = "spamhaus_drop.txt" } else if strings.Contains(lowURL, "abuseipdb") { name = "abuseipdb.txt" } else if strings.Contains(lowURL, "sslproxies") { name = "sslproxies.txt" } else if strings.Contains(lowURL, "firehol_proxies") { name = "firehol_proxies.txt" } else {
-			parts := strings.Split(strings.TrimRight(url, "/"), "/")
-			name = parts[len(parts)-1]
-			if !strings.Contains(name, ".") { name += ".txt" }
+		lowURL := strings.ToLower(remoteURL)
+		if strings.Contains(lowURL, "spamhaus") {
+			name = "spamhaus_drop.txt"
+		} else if strings.Contains(lowURL, "abuseipdb") {
+			name = "abuseipdb.txt"
+		} else if strings.Contains(lowURL, "sslproxies") {
+			name = "sslproxies.txt"
+		} else if strings.Contains(lowURL, "firehol_proxies") {
+			name = "firehol_proxies.txt"
+		} else {
+			// Sanitize the filename to prevent path traversal
+			parsedURL, err := url.Parse(remoteURL)
+			if err == nil {
+				pathParts := strings.Split(parsedURL.Path, "/")
+				if len(pathParts) > 0 {
+					name = pathParts[len(pathParts)-1]
+				}
+			}
+			// Final safety: ensure no slashes or dots that could escape the dir
+			name = strings.ReplaceAll(name, "/", "_")
+			name = strings.ReplaceAll(name, "\\", "_")
+			if name == "" || name == "." || name == ".." {
+				name = "remote_list.txt"
+			}
+			if !strings.Contains(name, ".") {
+				name += ".txt"
+			}
 		}
 		process(name, string(data))
 	}
