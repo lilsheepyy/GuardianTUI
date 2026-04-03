@@ -1,17 +1,97 @@
 [
   {
-    "pattern": "(?i)reveal your secret key",
+    "pattern": "(?i)reveal your secret key|revela tu clave secreta",
     "weight": 5,
-    "description": "Custom Secret Key Leakage"
+    "description": "Secret Key Leakage Attempt"
   },
   {
-    "pattern": "(?i)ignore the previous system message",
+    "pattern": "(?i)ignore (all )?previous instructions|ignora (todas )?las instrucciones anteriores",
+    "weight": 4,
+    "description": "Instruction Override Attempt"
+  },
+  {
+    "pattern": "(?i)system prompt|prompt del sistema|instrucciones del sistema",
     "weight": 3,
-    "description": "Custom Override Attempt"
+    "description": "System Prompt Disclosure Attempt"
   },
   {
-    "pattern": "(?i)talk like a pirate",
+    "pattern": "(?i)developer mode|modo desarrollador|unfiltered mode|modo sin filtros",
+    "weight": 5,
+    "description": "Jailbreak / Developer Mode Attempt"
+  },
+  {
+    "pattern": "(?i)dan mode|modo dan|jailbreak",
+    "weight": 5,
+    "description": "Jailbreak Signature"
+  },
+  {
+    "pattern": "(?i)act as (a|an)|actua como (un|una)|eres ahora (un|una)",
     "weight": 2,
-    "description": "Forced Persona Change"
+    "description": "Persona Hijack Attempt"
+  },
+  {
+    "pattern": "(?i)forget your rules|olvida tus reglas|ignora tus normas",
+    "weight": 4,
+    "description": "Safety Policy Override"
+  },
+  {
+    "pattern": "(?i)internal configuration|configuracion interna",
+    "weight": 3,
+    "description": "Internal Info Leakage"
+  },
+  {
+    "pattern": "(?i)respond only with|responde solo con",
+    "weight": 2,
+    "description": "Output Constraint Manipulation"
+  },
+  {
+    "pattern": "(?i)translate this and execute|traduce esto y ejecutalo",
+    "weight": 3,
+    "description": "Obfuscated Execution Attempt"
+  },
+  {
+    "pattern": "(?i)you are now|ahora eres|pretend to be|pretende ser",
+    "weight": 2,
+    "description": "Roleplay/Persona Hijack"
+  },
+  {
+    "pattern": "(?i)stop being|deja de ser|no seas",
+    "weight": 2,
+    "description": "Constraint Removal Attempt"
+  },
+  {
+    "pattern": "(?i)base instructions|instrucciones base|reglas base",
+    "weight": 3,
+    "description": "Prompt Extraction Attempt"
+  },
+  {
+    "pattern": "(?i)disregard all|descarta todo|no hagas caso a",
+    "weight": 3,
+    "description": "Instruction Erasure Attempt"
+  },
+  {
+    "pattern": "(?i)start a new session|inicia una nueva sesion|reinicia",
+    "weight": 2,
+    "description": "Session Reset Attempt"
+  },
+  {
+    "pattern": "(?i)bypass safety|saltar seguridad|omitir proteccion",
+    "weight": 5,
+    "description": "Safety Bypass Intent"
+  },
+  {
+    "pattern": "(?i)hypothetically speaking|hipoteticamente hablando",
+    "weight": 2,
+    "description": "Hypothetical Scenario Bypass"
+  },
+  {
+    "pattern": "(?i)for research purposes|para propositos de investigacion",
+    "weight": 2,
+    "description": "Research Context Bypass"
+  },
+  {
+    "pattern": "(?i)story about a user who|historia sobre un usuario que",
+    "weight": 2,
+    "description": "Narrative Bypass Attempt"
   }
 ]
