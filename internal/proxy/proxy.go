@@ -20,6 +20,42 @@ import (
 	"github.com/google/uuid"
 )
 
+var DefaultHoneypotPaths = []string{
+	// Configuration & Secrets
+	"/.env", "/.env.local", "/.env.production", "/.env.example", "/.env.bak",
+	"/.git/config", "/.git/index", "/.git/HEAD", "/.svn/", "/.hg/",
+	"/.ssh/id_rsa", "/.ssh/id_dsa", "/.ssh/id_ed25519", "/.ssh/authorized_keys",
+	"/.aws/credentials", "/.aws/config", "/.azure/credentials", "/.docker/config.json",
+	"/.npmrc", "/.yarnrc", "/.pypirc", "/.netrc", "/.passwd", "/.shadow",
+	
+	// CMS & Admin Panels
+	"/wp-admin", "/wp-login.php", "/wp-config.php", "/wp-content/debug.log",
+	"/phpmyadmin", "/admin/phpmyadmin", "/pma/", "/dbadmin/", "/myadmin/",
+	"/admin/index.php", "/administrator/", "/backend/", "/controlpanel/",
+	"/manager/html", "/joomla/", "/drupal/", "/magento/",
+	
+	// App Metadata & Debug
+	"/config.php", "/config.inc.php", "/web.config", "/appsettings.json",
+	"/appsettings.Development.json", "/composer.json", "/composer.lock",
+	"/package.json", "/package-lock.json", "/yarn.lock", "/Dockerfile",
+	"/docker-compose.yml", "/.vscode/sftp.json", "/.idea/workspace.xml",
+	"/server-status", "/server-info", "/phpinfo.php", "/info.php",
+	
+	// Databases & Backups
+	"/backup.sql", "/db.sql", "/dump.sql", "/data.sql", "/backup.tar.gz",
+	"/backup.zip", "/site.bak", "/old.zip", "/archive.tar", "/www.zip",
+	"/database.sqlite", "/db.sqlite3", "/admin/db.php",
+	
+	// Cloud & Infrastructure
+	"/latest/meta-data/", "/v1/meta-data/", "/computeMetadata/v1/",
+	"/.kube/config", "/.minikube/config", "/.terraform/terraform.tfstate",
+	"/kibana/", "/grafana/", "/prometheus/", "/solr/", "/jenkins/",
+	
+	// Offensive Tools Targets
+	"/actuator/health", "/actuator/env", "/actuator/heapdump", "/jolokia/",
+	"/api/v1/debug", "/api/v1/config", "/_profiler/phpinfo", "/_ast/",
+}
+
 const blockPageTmpl = `
 <!DOCTYPE html>
 <html lang="en">
@@ -130,6 +166,17 @@ type Engine struct {
 	Mode            string // ids, ips, strict
 	PoWForce        bool   // Global override: challenge everyone
 	mu              sync.RWMutex
+
+	// Honeypots
+	HoneypotsEnabled bool
+
+	// 404 Spike Detection
+	fourOhFourHistory [ShardCount]*fourOhFourShard
+}
+
+type fourOhFourShard struct {
+	mu sync.Mutex
+	m  map[string][]time.Time
 }
 
 func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, error) {
@@ -147,13 +194,18 @@ func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, erro
 	}
 
 	e := &Engine{
-		TargetURL:  u,
-		BlockedIPs: NewShardedIPMap(),
-		LogChan:    logChan,
-		Config:     cfg,
-		PoW:        powSys,
-		Mode:       mode,
-		PoWForce:   cfg != nil && cfg.Engine.PoWForce,
+		TargetURL:        u,
+		BlockedIPs:       NewShardedIPMap(),
+		LogChan:          logChan,
+		Config:           cfg,
+		PoW:              powSys,
+		Mode:             mode,
+		PoWForce:         cfg != nil && cfg.Engine.PoWForce,
+		HoneypotsEnabled: true,
+	}
+
+	for i := 0; i < ShardCount; i++ {
+		e.fourOhFourHistory[i] = &fourOhFourShard{m: make(map[string][]time.Time)}
 	}
 
 	e.BlocklistPtr.Store(&BlocklistSnapshot{
@@ -364,6 +416,42 @@ func (e *Engine) IsIPBlockedBySubnet(ip net.IP, parsedStr string) bool {
 	return false
 }
 
+func (e *Engine) trackFourOhFour(ip string) bool {
+	var hash uint32
+	for i := 0; i < len(ip); i++ {
+		hash = 31*hash + uint32(ip[i])
+	}
+	shard := e.fourOhFourHistory[hash%ShardCount]
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	now := time.Now()
+	windowSec := 60
+	if e.Config != nil && e.Config.Engine.ProbingWindow > 0 {
+		windowSec = e.Config.Engine.ProbingWindow
+	}
+	window := time.Duration(windowSec) * time.Second
+	
+	var updated []time.Time
+	for _, t := range shard.m[ip] {
+		if now.Sub(t) < window {
+			updated = append(updated, t)
+		}
+	}
+	updated = append(updated, now)
+	shard.m[ip] = updated
+
+	threshold := 15
+	if e.Config != nil && e.Config.Engine.ProbingThreshold > 0 {
+		threshold = e.Config.Engine.ProbingThreshold
+	}
+
+	if len(updated) >= threshold {
+		return true
+	}
+	return false
+}
+
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	incidentID := uuid.New().String()[:8]
 
@@ -390,6 +478,32 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	parsedIP := net.ParseIP(remoteIPStr)
+
+	// --- Honeypot Shield ---
+	if e.HoneypotsEnabled {
+		hPaths := DefaultHoneypotPaths
+		if e.Config != nil && len(e.Config.HoneypotPaths) > 0 {
+			hPaths = e.Config.HoneypotPaths
+		}
+		for _, hp := range hPaths {
+			if strings.HasPrefix(r.URL.Path, hp) {
+				detection := &scanner.Detection{
+					Type:    "Honeypot Triggered",
+					Pattern: hp,
+					Level:   scanner.LevelCritical,
+				}
+				if e.Mode != "ids" {
+					e.Block(remoteIPStr)
+					e.serveBlockPage(w, incidentID, remoteIPStr, r, detection, false)
+					return
+				}
+				e.LogChan <- LogEntry{
+					ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Alert: detection, FullHeaders: r.Header,
+				}
+				// In IDS mode, we don't return here; we let the request proceed to observe behavior.
+			}
+		}
+	}
 
 	// Determine if this is an AI endpoint
 	isAI := false
@@ -624,6 +738,42 @@ func (e *Engine) modifyResponse(res *http.Response) error {
 
 	// Method 5: Via Header
 	res.Header.Add("Via", "1.1 guardianTUI")
+
+	// --- 404 Spike Detection ---
+	if res.StatusCode == http.StatusNotFound {
+		var remoteIPStr string
+		if res.Request != nil {
+			remoteIPStr = res.Request.Header.Get("CF-Connecting-IP")
+			if remoteIPStr == "" {
+				host, _, err := net.SplitHostPort(res.Request.RemoteAddr)
+				if err == nil {
+					remoteIPStr = host
+				} else {
+					remoteIPStr = res.Request.RemoteAddr
+				}
+			}
+		}
+
+		if remoteIPStr != "" && e.trackFourOhFour(remoteIPStr) {
+			if e.Mode != "ids" {
+				e.Block(remoteIPStr)
+			}
+			e.LogChan <- LogEntry{
+				ID:        "404-SPIKE-" + uuid.New().String()[:8],
+				Timestamp: time.Now(),
+				RemoteIP:  remoteIPStr,
+				Method:    res.Request.Method,
+				Path:      res.Request.URL.Path,
+				Status:    404,
+				Blocked:   e.Mode != "ids",
+				Alert: &scanner.Detection{
+					Type:    "Vulnerability Probing Bot (404 Spike)",
+					Level:   scanner.LevelCritical,
+					Pattern: "Excessive 404s detected",
+				},
+			}
+		}
+	}
 
 	// --- Secret Leakage Shield (DLP) ---
 	// We only scan text-based responses to avoid corrupting binaries

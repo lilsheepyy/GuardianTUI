@@ -24,17 +24,26 @@ var msfPatterns = []MetasploitPattern{
 	{`(?i)WinHttp\.WinHttpRequest\.5\.1`, "PowerShell WinHttp Stager", nil},
 	{`(?i)IEX\s*\(New-Object\s+Net\.WebClient\).DownloadString`, "PowerShell One-Liner Download/Execute", nil},
 	{`(?i)-ExecutionPolicy\s+Bypass\s+-WindowStyle\s+Hidden`, "PowerShell Stealth Execution Flags", nil},
+	{`(?i)PowerShell\s+-NoP\s+-NonI\s+-W\s+Hidden\s+-Enc`, "PowerShell Base64 Encoded Command", nil},
+
+	// --- COBALT STRIKE & EMPIRE INDICATORS ---
+	{`(?i)\b(reflectiveLoader|GetProcAddress|VirtualAlloc|CreateRemoteThread)\b`, "WinAPI Memory Injection Signature", nil},
+	{`(?i)\b(beacon\.dll|beacon\.exe|stager\.dll|stager\.exe)\b`, "Cobalt Strike Beacon Signature", nil},
+	{`(?i)/___/`, "Empire Default URI Pattern", nil},
+	{`(?i)/admin/get\.php\?session=`, "Empire Session URI Pattern", nil},
 
 	// --- EXPLOIT MODULE PAYLOADS ---
 	{`(?i)jndi:(ldap|rmi|dns|nis|iiop|corba|lds|http):`, "Log4j Remote Class Loading (JNDI)", nil},
 	{`(?i)ognl\.OgnlContext`, "Struts2 OGNL Injection", nil},
 	{`(?i)java\.lang\.ProcessBuilder`, "Java RCE Payload Indicator", nil},
 	{`(?i)ysoserial`, "Common Java Deserialization Exploit Tool", nil},
+	{`(?i)T(String)?Object(Stream)?`, "Delphi/C++ Deserialization Payload", nil},
 	
 	// --- MISC MSF INDICATORS ---
 	{`(?i)\bMETERPRETER_TRANSPORT_HTTP\b`, "Meterpreter Transport ID", nil},
 	{`(?i)msfconsole`, "Metasploit Console Indicator", nil},
 	{`(?i)meterpreter`, "Meterpreter String Indicator", nil},
+	{`(?i)payload_type\s*=\s*['"]meterpreter['"]`, "MSF Payload Type Definition", nil},
 }
 
 func init() {

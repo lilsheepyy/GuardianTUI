@@ -15,10 +15,15 @@ The main configuration file controls the intensity and reach of the security eng
     - `strict`: Aggressive defense. Challenges all GET requests with PoW and enforces strict header policies.
 - `max_scan_size_bytes`: Maximum size of the request body to scan. (Default: 1MB).
 - `probing_window_seconds`: Time window (in seconds) used to track the behavioral history of an IP.
-- `probing_threshold_unique`: The number of unique attack types (e.g., SQLi + XSS) an IP can attempt before being automatically blocked as a "Probing Bot".
+- `probing_threshold_unique`: The number of unique attack types (e.g., SQLi + XSS) an IP can attempt before being automatically blocked as a "Probing Bot". (Used also for 404 Spike Detection).
 - `spam_threshold_total`: The total number of blocked requests an IP can make before its IP is blacklisted.
 - `pow_enabled`: Enable or disable the transparent Anti-DDoS PoW challenge. (Default: `false`).
 - `pow_difficulty`: Cryptographic complexity of the PoW puzzle. (Default: `4`).
+
+### Deception & Honeypots
+- `honeypot_paths`: A custom list of sensitive-looking paths (e.g., `["/.env", "/wp-admin"]`).
+    - **Defaults**: If empty, GuardianTUI uses a pre-configured list of 60+ bait paths.
+    - **TUI Command**: Honeypots can be toggled at runtime using `/honeypots set <on/off>`.
 
 ### AI & Prompt Protection
 - `endpoints`: A list of URL prefixes that require deep heuristic scoring (e.g., `["/v1/chat", "/api"]`).

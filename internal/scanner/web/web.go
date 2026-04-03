@@ -24,6 +24,10 @@ var (
 			Regex:     regexp.MustCompile(`(?i)\bUNION\b(\s+ALL)?\s+SELECT\b|\bUNION\b\s*\/\*.*?\*\/|(?i)\bJOIN\b\s+.*?SELECT\b`),
 		},
 		{
+			Detection: models.Detection{Level: models.LevelCritical, Type: "SQLi: sqlmap/Exploit Specific Payload"},
+			Regex:     regexp.MustCompile(`(?i)UNION\s+ALL\s+SELECT\s+NULL|(?i)AND\s+\d+=\d+\s*AND\s*\(SELECT\b|(?i)CASE\s+WHEN\s+\d+=\d+\s+THEN\s+\d+\s+ELSE\b|(?i)GROUP\s+BY\s+CONCAT|(?i)EXTRACTVALUE\s*\(|(?i)UPDATEXML\s*\(`),
+		},
+		{
 			Detection: models.Detection{Level: models.LevelCritical, Type: "SQLi: Time-Based/Blind"},
 			Regex:     regexp.MustCompile(`(?i)pg_sleep\s*\(|benchmark\s*\(|WAITFOR\s+DELAY\b|dbms_lock\.sleep\s*\(|sqlite3_sleep\s*\(|\bsleep\s*\(\s*\d+\s*\)`),
 		},
@@ -119,10 +123,16 @@ var (
 
 	agentBlacklist = []string{
 		"sqlmap", "nikto", "dirbuster", "gobuster", "acunetix", "wpscan", "masscan", "zgrab",
+		"commix", "nmap", "nessus", "openvas", "burpsuite", "zap", "arachni", "wfuzz",
+		"dirb", "metasploit", "nuclei", "shodan", "censys", "netsparker", "qualys",
+		"havij", "pangolin", "sql-ninja", "skipfish", "golismero", "webscarab",
+		"maltego", "spiderfoot", "beEF", "hydra", "medusa", "john", "hashcat",
 	}
 
 	scannerHeaders = []string{
 		"X-Scanner", "X-Waf-Test", "X-Nuclei-", "X-Forwarded-For-Poc",
+		"X-Sqlmap-", "X-Zap-", "X-Acunetix-", "X-Burp-", "X-Netsparker-",
+		"X-Appscan-", "X-Wxs-", "X-Scanner-",
 	}
 )
 

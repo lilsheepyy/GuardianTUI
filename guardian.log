@@ -203,3 +203,10 @@
 [2026-03-31 04:17:15] ID:886912ce IP:::1 POST /v1/chat | Status:BLOCKED | Agent:Mozilla/5.0
 [2026-03-31 04:17:15] ID:c6cc1417 IP:::1 GET / | Status:BLOCKED | Agent:zgrab/0.x
 [2026-03-31 04:17:15] ID:08303ae4 IP:::1 GET / | Status:BLOCKED | Agent:Mozilla/5.0
+[2026-04-02 01:45:29] ID:1bf836ee IP:176.65.148.66 HEAD / | Status:BLOCKED | Agent:Mozilla/5.0 (compatible; Let's Encrypt validation server; +https://www.letsencrypt.org  )
+[2026-04-02 01:45:30] ID:5aaa8f61 IP:176.65.148.66 GET / | Status:BLOCKED | Agent:Mozilla/5.0 (compatible; Let's Encrypt validation server; +https://www.letsencrypt.org  )
+[2026-04-02 01:45:31] ID:963efc6c IP:176.65.148.66 HEAD /_next | Status:BLOCKED | Agent:Mozilla/5.0 (compatible; Let's Encrypt validation server; +https://www.letsencrypt.org  )
+[2026-04-02 01:45:32] ID:6e8923ab IP:176.65.148.66 POST / | Status:BLOCKED | Agent:Mozilla/5.0 (compatible; Let's Encrypt validation server; +https://www.letsencrypt.org  )
+[2026-04-02 01:45:34] ID:fce8acce IP:176.65.148.66 POST /_next | Status:BLOCKED | Agent:Mozilla/5.0 (compatible; Let's Encrypt validation server; +https://www.letsencrypt.org  )
+[2026-04-02 01:52:24] ID:9695a407 IP:204.76.203.206 GET / | Status:BLOCKED | Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.85 Safari/537.36 Edg/90.0.818.46
+[2026-04-02 02:10:26] ID:904bc4b8 IP:87.106.104.164 GET / | Status:BLOCKED | Agent:python-requests/2.32.5

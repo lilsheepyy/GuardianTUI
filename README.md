@@ -40,6 +40,9 @@ Your application is now filtered and accessible via `http://localhost:8080`.
 
 - **High-Performance Sharding**: 64-way memory sharding for IP tracking and probing detection.
 - **Lock-Free Snapshots**: Atomic pointer swapping for zero-latency security updates.
+- **Multi-Layered Honeypots**: Active deception with 60+ hardcoded and user-definable bait paths (e.g., `/.env`, `/wp-admin`).
+- **404 Spike Detection**: Intelligent bot detection that auto-blocks IPs performing high-frequency directory brute-forcing.
+- **SQLmap & Tooling Shield**: Deep signature matching for 30+ offensive tools (SQLmap, Burp Suite, Nikto, Shodan, etc.).
 - **Deep Packet Inspection**: Recursive normalization (Base64, Hex, URL, HTML) of payloads.
 - **Advanced AI Shield**: Heuristic scoring specifically optimized for LLM/AI endpoints.
 - **Enterprise Logging**: Persistent JSON logging with automatic 10MB file rotation in the `logs/` folder.

@@ -55,8 +55,25 @@ Targeting DOM-based and event-driven JavaScript injection.
 
 ---
 
+## 🍯 Deceptive Defense: Honeypot Shield
+GuardianTUI implements **Active Deception** to trap and block automated scanners before they reach real application logic.
+- **🛡️ 60+ Bait Paths**: Monitors access to ultra-sensitive paths like `/.env`, `/wp-config.php`, `/.aws/credentials`, and `/.git/config`.
+- **🛡️ Multi-Layered Protection**: Detects configuration files, CMS admin panels, database dumps, and cloud infrastructure metadata probes.
+- **🛡️ Zero-Tolerance Blocking**: In `IPS` and `Strict` modes, a single hit to a honeypot path results in an immediate, permanent IP block.
+- **🛡️ Transparent Monitoring**: In `IDS` mode, honeypot hits are logged as critical alerts without blocking, allowing for deep behavioral observation.
+
+---
+
+## 📉 Behavioral Analysis: 404 Spike Detection
+Beyond static signatures, GuardianTUI analyzes the *intent* of a client through its response history.
+- **🛡️ Brute-Force Defense**: Automatically tracks `404 Not Found` responses per IP address.
+- **🛡️ Intelligent Thresholding**: If an IP triggers an excessive number of 404s (e.g., 15+ within 60 seconds), it is identified as a directory brute-forcer (like `gobuster` or `dirb`) and auto-blocked.
+- **🛡️ Memory Efficient**: Uses a 64-way sharded memory map to track thousands of concurrent IPs with near-zero latency.
+
+---
+
 ## 🗺️ Offensive Framework Defense
-Specifically targets the signatures of common security scanners and frameworks.
-- **🔍 Nmap Defense**: Blocks NSE (Nmap Scripting Engine) probes.
-- **🧪 Nuclei & OAST Scanning**: Detects interaction domains like `interactsh.com`.
-- **☕ Burp Suite Defense**: Blocks Burp Collaborator payloads and automated intruder traffic.
+Specifically targets the signatures of 30+ common security scanners and offensive frameworks.
+- **🧪 sqlmap Shield**: Deep signature matching for `sqlmap`'s distinctive `UNION ALL SELECT NULL` and `CASE WHEN` probing logic.
+- **🧪 Framework Detection**: Blocks signatures from `Cobalt Strike` (Beacons, reflective loaders), `Empire`, `Metasploit`, and `beEF`.
+- **🔍 Scanner Defense**: Blocks `Nmap`, `Nikto`, `Acunetix`, `WPSCan`, `ZAP`, `Burp Suite`, and `Nuclei` through both User-Agent and custom header analysis.

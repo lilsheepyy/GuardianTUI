@@ -31,14 +31,25 @@ var shellPatterns = []ShellPattern{
 	{`(?i)php\s+-r\s*['"].*\$sock\s*=\s*fsockopen\(.*exec\(.*sh\s+-i`, "PHP fsockopen Reverse Shell", nil},
 	{`(?i)php\s+-r\s*['"].*shell_exec\(.*nc\s+-e\s+sh`, "PHP Netcat Execution", nil},
 
-	// --- NETCAT REVERSE SHELLS ---
+	// --- NODE.JS REVERSE SHELLS ---
+	{`(?i)require\(['"]child_process['"]\)\.spawn\(['"]/(bin/)?sh['"]`, "Node.js Child Process Shell", nil},
+	{`(?i)require\(['"]net['"]\)\.connect\(.*\.pipe\(.*\.stdin\)`, "Node.js Net Socket Pipe", nil},
+
+	// --- JAVA REVERSE SHELLS ---
+	{`(?i)Runtime\.getRuntime\(\)\.exec\(.*['"]/(bin/)?sh['"]`, "Java Runtime Execution Shell", nil},
+	{`(?i)new\s+ProcessBuilder\(.*['"]/(bin/)?sh['"]\)\.start\(\)`, "Java ProcessBuilder Shell", nil},
+
+	// --- NETCAT & SOCAT REVERSE SHELLS ---
 	{`(?i)nc\s+(-e|--exec)\s+/(bin/)?(ba)?sh`, "Netcat Execution Shield (-e sh)", nil},
 	{`(?i)nc\s+(-c|--sh-exec)\s+/(bin/)?(ba)?sh`, "Netcat Execution Shield (-c sh)", nil},
 	{`(?i)rm\s+[^;]+;\s*mkfifo\s+[^;]+;\s*cat\s+[^|]+\|\s*/bin/sh\s+-i`, "Netcat FIFO Backpipe Shell", nil},
+	{`(?i)socat\s+tcp-connect:.*exec:.*sh`, "SOCAT Reverse Shell", nil},
+	{`(?i)nc\s+-lp\s+[0-9]+\s+-e\s+/(bin/)?sh`, "Netcat Bind Shell", nil},
 
 	// --- POWERSHELL REVERSE SHELLS ---
 	{`(?i)New-Object\s+System\.Net\.Sockets\.TCPClient\(.*\.GetStream\(\)`, "PowerShell TCPClient Shell", nil},
 	{`(?i)IEX\s*\(New-Object\s+Net\.WebClient\)\.DownloadString\(.*tcp:`, "PowerShell TCP One-Liner", nil},
+	{`(?i)\[System\.Convert\]::FromBase64String\(.*\[System\.Text\.Encoding\]::ASCII\.GetString`, "PowerShell Base64 Obfuscated Execution", nil},
 
 	// --- RUBY & OTHERS ---
 	{`(?i)ruby\s+-rsocket\s*-e\s*['"].*TCPSocket\.new\(.*spawn\(.*sh\s+-i`, "Ruby TCPSocket Reverse Shell", nil},

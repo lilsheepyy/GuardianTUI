@@ -1,54 +1,91 @@
-# GuardianTUI Professional Configuration
-
-# --- SECURITY ENGINE SETTINGS ---
-engine:
-  # Limit scanning effort for large payloads (default 1MB)
-  max_scan_size_bytes: 1048576
-  
-  # Window to track bot behavior (seconds)
-  probing_window_seconds: 60
-  
-  # Number of unique vuln types probed before critical alert
-  probing_threshold_unique: 3
-  
-  # Total number of detections before automatic bot spam alert
-  spam_threshold_total: 5
-
-# --- AI SHIELD (ANTI-AI ABUSE) ---
-ai_protection:
-  # List of endpoints to apply AI-specific heuristics
-  endpoints:
-    - "/v1/chat"
-    - "/api/ai"
-    - "/generate"
-  
-  # Heuristic Score Threshold (Lower = stricter, default 5)
-  score_threshold: 5
-  
-  # Enable PII (Credit Cards, SSN) data leakage prevention
-  protect_pii: true
-
-  # Hard keywords to block in AI prompts
-  blocked_keywords:
-    - "internal_key"
-    - "admin_password"
-
-# --- NETWORK ---
-whitelist:
-
-
-# List of User-Agent substrings to block
+whitelist: []
 blocked_user_agents:
-  - "CensysInspect"
-  - "Go-http-client"
-  - "zgrab"
-
-# Path to a file containing IPs or CIDR ranges to block (one per line)
-blocklist_path: "blocklist.txt"
-
-# List of remote blocklist URLs to fetch on startup
+    - CensysInspect
+    - zgrab
+    - shodan
+    - masscan
+    - nmap
+    - Nessus
+    - Go-http-client
+    - python-requests
+    - python-urllib
+    - curl
+    - wget
+    - libwww-perl
+    - PHP/
+    - aiohttp
+    - AhrefsBot
+    - SemrushBot
+    - DotBot
+    - Rogerbot
+    - MJ12bot
+    - MegaIndex.ru
+    - BLEXBot
+    - PetalBot
+honeypot_paths:
+    - /.env
+    - /.env.local
+    - /.env.production
+    - /.git/config
+    - /.git/HEAD
+    - /.ssh/id_rsa
+    - /.aws/credentials
+    - /.aws/config
+    - /.docker/config.json
+    - /.npmrc
+    - /wp-admin
+    - /wp-login.php
+    - /wp-config.php
+    - /phpmyadmin
+    - /admin/phpmyadmin
+    - /pma/
+    - /administrator/
+    - /backend/index.php
+    - /joomla/
+    - /config.php
+    - /web.config
+    - /appsettings.json
+    - /composer.json
+    - /package.json
+    - /Dockerfile
+    - /docker-compose.yml
+    - /server-status
+    - /phpinfo.php
+    - /backup.sql
+    - /db.sql
+    - /dump.sql
+    - /backup.zip
+    - /site.bak
+    - /archive.tar
+    - /database.sqlite
+    - /latest/meta-data/
+    - /.kube/config
+    - /kibana/
+    - /jenkins/
+    - /actuator/health
+    - /api/v1/debug
+blocklist_path: blocklist.txt
 remote_blocklists:
-  - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/sslproxies_7d.ipset"
-  - "https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/firehol_proxies.netset"
-  - "https://www.spamhaus.org/drop/drop.txt"
-  - "https://raw.githubusercontent.com/borestad/blocklist-abuseipdb/main/abuseipdb-s100-1d.ipv4"
+    - https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/sslproxies_7d.ipset
+    - https://raw.githubusercontent.com/firehol/blocklist-ipsets/refs/heads/master/firehol_proxies.netset
+    - https://www.spamhaus.org/drop/drop.txt
+    - https://raw.githubusercontent.com/borestad/blocklist-abuseipdb/main/abuseipdb-s100-1d.ipv4
+ai_protection:
+    endpoints:
+        - /v1/chat
+        - /api/ai
+        - /generate
+    protect_pii: true
+    blocked_keywords:
+        - internal_key
+        - admin_password
+    score_threshold: 5
+engine:
+    max_scan_size_bytes: 1048576
+    probing_window_seconds: 60
+    probing_threshold_unique: 3
+    spam_threshold_total: 5
+    pow_enabled: false
+    pow_difficulty: 0
+telemetry_enabled: true
+telemetry_asked: true

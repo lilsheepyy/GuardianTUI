@@ -222,7 +222,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				val := strings.ToLower(m.searchInput.Value())
 				themeList := []string{"cyber", "forest", "dracula", "monochrome"}
 				modeList := []string{"ips", "ids", "strict"}
-				baseCmds := []string{"search ", "themes set ", "modes set ", "pow set ", "clear", "quit"}
+				baseCmds := []string{"search ", "themes set ", "modes set ", "pow set ", "honeypots set ", "clear", "quit"}
 				if strings.HasPrefix(val, "themes set ") {
 					m.suggIdx = (m.suggIdx + 1) % len(themeList)
 					m.searchInput.SetValue("themes set " + themeList[m.suggIdx])
@@ -239,6 +239,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					powOpts := []string{"on", "off"}
 					m.suggIdx = (m.suggIdx + 1) % len(powOpts)
 					m.searchInput.SetValue("pow set " + powOpts[m.suggIdx])
+					m.searchInput.SetCursor(len(m.searchInput.Value()))
+					return m, nil
+				}
+				if strings.HasPrefix(val, "honeypots set ") {
+					hpOpts := []string{"on", "off"}
+					m.suggIdx = (m.suggIdx + 1) % len(hpOpts)
+					m.searchInput.SetValue("honeypots set " + hpOpts[m.suggIdx])
 					m.searchInput.SetCursor(len(m.searchInput.Value()))
 					return m, nil
 				}
@@ -294,6 +301,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								}
 							} else if choice == "off" {
 								m.engine.PoWForce = false
+							}
+						}
+					}
+				} else if strings.HasPrefix(strings.ToLower(val), "honeypots set ") {
+					parts := strings.Split(val, " ")
+					if len(parts) >= 3 {
+						choice := strings.ToLower(parts[2])
+						if m.engine != nil {
+							if choice == "on" {
+								m.engine.HoneypotsEnabled = true
+							} else if choice == "off" {
+								m.engine.HoneypotsEnabled = false
 							}
 						}
 					}
