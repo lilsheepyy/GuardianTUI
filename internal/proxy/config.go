@@ -29,6 +29,8 @@ type TUIConfig struct {
 
 type Config struct {
 	Whitelist         []string     `yaml:"whitelist"`
+	WhitelistFingerprints []string `yaml:"whitelist_fingerprints"`
+	BlockedFingerprints   []string `yaml:"blocked_fingerprints"`
 	BlockedUserAgents []string     `yaml:"blocked_user_agents"`
 	HoneypotPaths     []string     `yaml:"honeypot_paths"`
 	BlocklistPath     string       `yaml:"blocklist_path"`

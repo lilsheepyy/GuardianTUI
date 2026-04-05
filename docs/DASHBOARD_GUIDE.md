@@ -31,6 +31,36 @@ A live-scrolling feed of all security events.
 - **`PASSIVE MONITORING`**: Legitimate traffic being logged.
 - **`🛡️ DETECTED`**: Attack identified and logged.
 - **`🚫 BLOCKED`**: High-risk attack blocked by the IPS.
+- **`ENTER`**: Press `Enter` on any log entry to open the **Deep Incident Inspector**.
+
+---
+
+## 🔍 Deep Incident Inspector
+Press `Enter` while navigating the log table to open a full-screen report of a specific security event.
+
+- **Event Identification**: ID, Timestamp, Source IP, and Path.
+- **Security Analysis**: Detailed threat type, matched patterns, and risk level.
+- **HTTP Headers**: View the full request headers as received by the proxy.
+- **Raw Payload**: Inspect the original POST/PUT body or query strings.
+- **De-obfuscated Payload**: GuardianTUI automatically normalizes the payload (URL decoding, HTML unescaping, Base64/Hex decoding) to reveal hidden attack patterns.
+
+Press `Esc` or `Backspace` to return to the main dashboard.
+
+---
+
+## ⚙️ Interactive Config Editor
+Press `c` to enter the **Configuration Editor**. This allows you to modify the engine's behavior in real-time without restarting.
+
+- **System Mode**: Switch between `ips`, `ids`, and `strict` modes.
+- **Detection Thresholds**: Adjust `Probing Threshold`, `Spam Threshold`, and `Probing Window`.
+- **Security Shields**: Toggle `PoW Enabled` and `Honeypots` on or off.
+- **Auto-Save**: Changes are applied immediately and saved to `config.yaml`.
+
+**Navigation:**
+- **`Tab / Down`**: Move to the next field.
+- **`Shift+Tab / Up`**: Move to the previous field.
+- **`Enter`**: Apply the value in the current field.
+- **`Esc`**: Return to the main dashboard.
 
 ---
 
@@ -46,6 +76,11 @@ Press `/` to open the terminal bar. The following commands are available:
 - **`modes set <name>`**: Change the operational mode (e.g., `ips`, `ids`, `strict`).
 - **`clear`**: Resets all active filters and returns to the live feed.
 - **`quit`**: Gracefully shuts down the proxy and exits.
+
+### Direct Commands
+- **`b`**: Select a row in the log table and press `b` to instantly add the Source IP to the blocklist.
+- **`c`**: Open the Interactive Config Editor.
+- **`Enter`**: Open the Deep Incident Inspector.
 
 ### Advanced Autocomplete
 GuardianTUI features a smart **Tab-completion** system:

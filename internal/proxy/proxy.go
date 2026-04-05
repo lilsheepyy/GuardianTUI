@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"guardiantui/internal/proxy/pow"
 	"guardiantui/internal/scanner"
@@ -147,6 +148,7 @@ type LogEntry struct {
 	Method      string
 	Path        string
 	Agent       string
+	Fingerprint string
 	Status      int
 	Blocked     bool
 	Alert       *scanner.Detection
@@ -158,6 +160,8 @@ type Engine struct {
 	TargetURL       *url.URL
 	Proxy           *httputil.ReverseProxy
 	BlockedIPs      *ShardedIPMap
+	BlockedFingerprints *ShardedIPMap
+	WhitelistedFingerprints *ShardedIPMap
 	BlocklistPtr    atomic.Pointer[BlocklistSnapshot]
 	Whitelist       []*net.IPNet
 	LogChan         chan LogEntry
@@ -165,6 +169,7 @@ type Engine struct {
 	PoW             *pow.System
 	Mode            string // ids, ips, strict
 	PoWForce        bool   // Global override: challenge everyone
+	ConfigPath      string // Path to the config file for saving changes
 	mu              sync.RWMutex
 
 	// Honeypots
@@ -179,7 +184,7 @@ type fourOhFourShard struct {
 	m  map[string][]time.Time
 }
 
-func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, error) {
+func NewEngine(target string, logChan chan LogEntry, cfg *Config, configPath string) (*Engine, error) {
 	u, err := url.Parse(target)
 	if err != nil { return nil, err }
 	
@@ -196,12 +201,24 @@ func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, erro
 	e := &Engine{
 		TargetURL:        u,
 		BlockedIPs:       NewShardedIPMap(),
+		BlockedFingerprints: NewShardedIPMap(),
+		WhitelistedFingerprints: NewShardedIPMap(),
 		LogChan:          logChan,
 		Config:           cfg,
+		ConfigPath:       configPath,
 		PoW:              powSys,
 		Mode:             mode,
 		PoWForce:         cfg != nil && cfg.Engine.PoWForce,
 		HoneypotsEnabled: true,
+	}
+
+	if cfg != nil {
+		for _, fp := range cfg.WhitelistFingerprints {
+			e.WhitelistedFingerprints.Store(fp, true)
+		}
+		for _, fp := range cfg.BlockedFingerprints {
+			e.BlockedFingerprints.Store(fp, true)
+		}
 	}
 
 	for i := 0; i < ShardCount; i++ {
@@ -212,6 +229,18 @@ func NewEngine(target string, logChan chan LogEntry, cfg *Config) (*Engine, erro
 		Subnets:  make([]*net.IPNet, 0),
 		ExactIPs: make(map[string]bool),
 	})
+
+	// --- Known Malicious Fingerprints (Pre-calculated for common offensive tools) ---
+	badFPs := []string{
+		"7f8725841444397e", // sqlmap default
+		"8b15e4f48b1464f1", // nikto default
+		"4d548f4b14e4497e", // gobuster default
+		"2f548f4b14e4497e", // dirb default
+		"9f8725841444397e", // nmap NSE default
+	}
+	for _, fp := range badFPs {
+		e.BlockedFingerprints.Store(fp, true)
+	}
 
 	e.Proxy = httputil.NewSingleHostReverseProxy(u)
 	originalDirector := e.Proxy.Director
@@ -476,6 +505,26 @@ func (e *Engine) trackFourOhFour(ip string) bool {
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	incidentID := uuid.New().String()[:8]
+	fingerprint := e.generateFingerprint(r)
+
+	// --- Fingerprint Whitelist (Bypasses EVERYTHING) ---
+	if _, whitelisted := e.WhitelistedFingerprints.Load(fingerprint); whitelisted {
+		e.LogChan <- LogEntry{
+			ID:          incidentID,
+			Timestamp:   time.Now(),
+			RemoteIP:    r.RemoteAddr,
+			Method:      r.Method,
+			Path:        r.URL.Path,
+			Agent:       r.UserAgent(),
+			Fingerprint: fingerprint,
+			Status:      200,
+			Blocked:     false,
+			Alert:       &scanner.Detection{Type: "Whitelisted Fingerprint", Level: scanner.LevelLow},
+			FullHeaders: r.Header,
+		}
+		e.Proxy.ServeHTTP(w, r)
+		return
+	}
 
 	// --- Unauthorized Proxy Shield ---
 	// We strictly prohibit X-Forwarded-For to prevent proxy-looping and IP spoofing.
@@ -490,7 +539,8 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Discover Real Client IP (Cloudflare Trusted)
 	remoteIPStr := r.Header.Get("CF-Connecting-IP")
-	if remoteIPStr == "" {
+	isCF := remoteIPStr != ""
+	if !isCF {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err == nil {
 			remoteIPStr = host
@@ -500,6 +550,16 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	parsedIP := net.ParseIP(remoteIPStr)
+
+	// --- Fingerprint Block Shield (Only if NOT Cloudflare, or always as secondary) ---
+	if _, blocked := e.BlockedFingerprints.Load(fingerprint); blocked {
+		e.serveBlockPage(w, incidentID, remoteIPStr, r, &scanner.Detection{
+			Type: "Client Fingerprint Blocked",
+			Pattern: fingerprint,
+			Level: scanner.LevelCritical,
+		}, true)
+		return
+	}
 
 	// --- Honeypot Shield ---
 	if e.HoneypotsEnabled {
@@ -515,12 +575,12 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Level:   scanner.LevelCritical,
 				}
 				if e.Mode != "ids" {
-					e.Block(remoteIPStr)
+					e.BlockPersistent(remoteIPStr, fingerprint)
 					e.serveBlockPage(w, incidentID, remoteIPStr, r, detection, false)
 					return
 				}
 				e.LogChan <- LogEntry{
-					ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Alert: detection, FullHeaders: r.Header,
+					ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Fingerprint: fingerprint, Alert: detection, FullHeaders: r.Header,
 				}
 				// In IDS mode, we don't return here; we let the request proceed to observe behavior.
 			}
@@ -552,9 +612,10 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				detection := &scanner.Detection{Type: "Blocked User-Agent", Pattern: blockedUA, Level: scanner.LevelCritical}
 				if e.Mode == "ids" {
 					e.LogChan <- LogEntry{
-						ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: ua, Alert: detection, FullHeaders: r.Header,
+						ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: ua, Fingerprint: fingerprint, Alert: detection, FullHeaders: r.Header,
 					}
 				} else {
+					e.BlockPersistent(remoteIPStr, fingerprint)
 					e.serveBlockPage(w, incidentID, remoteIPStr, r, detection, false)
 					return
 				}
@@ -566,9 +627,10 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, blocked := e.BlockedIPs.Load(remoteIPStr); blocked {
 		if e.Mode == "ids" {
 			e.LogChan <- LogEntry{
-				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Status: 200, Blocked: true, Alert: &scanner.Detection{Type: "IP Blocked (IDS Mode)", Level: scanner.LevelCritical}, FullHeaders: r.Header,
+				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Fingerprint: fingerprint, Status: 200, Blocked: true, Alert: &scanner.Detection{Type: "IP Blocked (IDS Mode)", Level: scanner.LevelCritical}, FullHeaders: r.Header,
 			}
 		} else {
+			e.BlockPersistent(remoteIPStr, fingerprint)
 			e.serveBlockPage(w, incidentID, remoteIPStr, r, nil, true)
 			return
 		}
@@ -576,9 +638,10 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if e.IsIPBlockedBySubnet(parsedIP, remoteIPStr) {
 		if e.Mode == "ids" {
 			e.LogChan <- LogEntry{
-				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Status: 200, Blocked: true, Alert: &scanner.Detection{Type: "IP Blocklist (IDS Mode)", Level: scanner.LevelCritical}, FullHeaders: r.Header,
+				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Fingerprint: fingerprint, Status: 200, Blocked: true, Alert: &scanner.Detection{Type: "IP Blocklist (IDS Mode)", Level: scanner.LevelCritical}, FullHeaders: r.Header,
 			}
 		} else {
+			e.BlockPersistent(remoteIPStr, fingerprint)
 			e.serveBlockPage(w, incidentID, remoteIPStr, r, &scanner.Detection{Type: "IP Blocklist", Level: scanner.LevelCritical}, false)
 			return
 		}
@@ -599,7 +662,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if dlpDetection := dlp.AnalyzeRequest(decodedPath); dlpDetection != nil {
 		if e.Mode == "ids" {
 			e.LogChan <- LogEntry{
-				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Alert: dlpDetection, FullHeaders: r.Header,
+				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Fingerprint: fingerprint, Alert: dlpDetection, FullHeaders: r.Header,
 			}
 		} else {
 			e.serveBlockPage(w, incidentID, remoteIPStr, r, dlpDetection, false)
@@ -647,9 +710,10 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if detection != nil {
 		if e.Mode == "ids" {
 			e.LogChan <- LogEntry{
-				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Alert: detection, FullHeaders: r.Header,
+				ID: incidentID, Timestamp: time.Now(), RemoteIP: remoteIPStr, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Fingerprint: fingerprint, Alert: detection, FullHeaders: r.Header,
 			}
 		} else {
+			e.BlockPersistent(remoteIPStr, fingerprint)
 			e.serveBlockPage(w, incidentID, remoteIPStr, r, detection, false)
 			return
 		}
@@ -702,6 +766,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Method:      r.Method,
 		Path:        r.URL.Path,
 		Agent:       r.UserAgent(),
+		Fingerprint: fingerprint,
 		Alert:       nil,
 		FullHeaders: r.Header,
 		Payload:     bodyCaptured,
@@ -729,6 +794,7 @@ func (e *Engine) SendHeartbeat() {
 }
 
 func (e *Engine) serveBlockPage(w http.ResponseWriter, id, ip string, r *http.Request, d *scanner.Detection, alreadyBlocked bool) {
+	fp := e.generateFingerprint(r)
 	e.LogChan <- LogEntry{
 		ID:          id,
 		Timestamp:   time.Now(),
@@ -736,6 +802,7 @@ func (e *Engine) serveBlockPage(w http.ResponseWriter, id, ip string, r *http.Re
 		Method:      r.Method,
 		Path:        r.URL.Path,
 		Agent:       r.UserAgent(),
+		Fingerprint: fp,
 		Status:      403,
 		Blocked:     true,
 		Alert:       d,
@@ -777,8 +844,9 @@ func (e *Engine) modifyResponse(res *http.Response) error {
 		}
 
 		if remoteIPStr != "" && e.trackFourOhFour(remoteIPStr) {
+			fp := e.generateFingerprint(res.Request)
 			if e.Mode != "ids" {
-				e.Block(remoteIPStr)
+				e.BlockPersistent(remoteIPStr, fp)
 			}
 			e.LogChan <- LogEntry{
 				ID:        "404-SPIKE-" + uuid.New().String()[:8],
@@ -786,6 +854,7 @@ func (e *Engine) modifyResponse(res *http.Response) error {
 				RemoteIP:  remoteIPStr,
 				Method:    res.Request.Method,
 				Path:      res.Request.URL.Path,
+				Fingerprint: fp,
 				Status:    404,
 				Blocked:   e.Mode != "ids",
 				Alert: &scanner.Detection{
@@ -833,7 +902,78 @@ func (e *Engine) modifyResponse(res *http.Response) error {
 	return nil
 }
 func (e *Engine) Block(ip string) { e.BlockedIPs.Store(ip, true) }
+
+func (e *Engine) BlockWithFingerprint(ip, fp string) {
+	e.Block(ip)
+	if fp != "" {
+		e.BlockedFingerprints.Store(fp, true)
+	}
+}
+
+func (e *Engine) BlockPersistent(ip, fp string) error {
+	e.BlockWithFingerprint(ip, fp)
+	if e.Config == nil { return nil }
+
+	// 1. Persist IP to blocklist file
+	path := e.Config.BlocklistPath
+	if path == "" {
+		path = "blocklist.txt"
+		e.Config.BlocklistPath = path
+		if e.ConfigPath != "" { e.Config.Save(e.ConfigPath) }
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err == nil {
+		f.WriteString(ip + "\n")
+		f.Close()
+	}
+
+	// 2. Persist Fingerprint to config
+	if fp != "" {
+		found := false
+		for _, existing := range e.Config.BlockedFingerprints {
+			if existing == fp { found = true; break }
+		}
+		if !found {
+			e.Config.BlockedFingerprints = append(e.Config.BlockedFingerprints, fp)
+			if e.ConfigPath != "" { e.Config.Save(e.ConfigPath) }
+		}
+	}
+	return nil
+}
 func (e *Engine) Unblock(ip string) { e.BlockedIPs.Delete(ip) }
+
+func (e *Engine) WhitelistFingerprintPersistent(fp string) error {
+	if fp == "" { return nil }
+	e.WhitelistedFingerprints.Store(fp, true)
+	if e.Config == nil { return nil }
+
+	// Add to config if not already there
+	found := false
+	for _, existing := range e.Config.WhitelistFingerprints {
+		if existing == fp { found = true; break }
+	}
+	if !found {
+		e.Config.WhitelistFingerprints = append(e.Config.WhitelistFingerprints, fp)
+		if e.ConfigPath != "" {
+			return e.Config.Save(e.ConfigPath)
+		}
+	}
+	return nil
+}
+
+func (e *Engine) generateFingerprint(r *http.Request) string {
+	// Fingerprint based on common client attributes
+	data := fmt.Sprintf("%s|%s|%s|%s|%s",
+		r.UserAgent(),
+		r.Header.Get("Accept"),
+		r.Header.Get("Accept-Language"),
+		r.Header.Get("Accept-Encoding"),
+		r.Header.Get("DNT"),
+	)
+	hash := sha256.Sum256([]byte(data))
+	return fmt.Sprintf("%x", hash)[:16]
+}
 
 func NewPoWSystem(difficulty int, key string) *pow.System {
 	return pow.NewSystem(difficulty, key)

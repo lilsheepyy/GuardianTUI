@@ -14,7 +14,7 @@ func TestHoneypotToggle(t *testing.T) {
 
 	logChan := make(chan LogEntry, 10)
 	cfg := &Config{Engine: EngineConfig{Mode: "ips"}}
-	e, _ := NewEngine(backend.URL, logChan, cfg)
+	e, _ := NewEngine(backend.URL, logChan, cfg, "")
 	
 	// Test enabled (should block /.env which is in honeypotPaths)
 	e.HoneypotsEnabled = true
@@ -46,7 +46,7 @@ func Test404Spike(t *testing.T) {
 			ProbingThreshold: 5,
 		},
 	}
-	e, _ := NewEngine(backend.URL, logChan, cfg)
+	e, _ := NewEngine(backend.URL, logChan, cfg, "")
 
 	ip := "1.2.3.4"
 	for i := 0; i < 5; i++ {

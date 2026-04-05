@@ -31,6 +31,7 @@ type LogSchema struct {
 	Blocked    bool              `json:"blocked"`
 	Alert      *scanner.Detection `json:"alert,omitempty"`
 	UserAgent  string            `json:"user_agent"`
+	Fingerprint string           `json:"fingerprint"`
 	Headers    http.Header       `json:"headers,omitempty"`
 }
 
@@ -85,6 +86,7 @@ func main() {
 				Blocked:   entry.Blocked,
 				Alert:     entry.Alert,
 				UserAgent: entry.Agent,
+				Fingerprint: entry.Fingerprint,
 				Headers:   entry.FullHeaders,
 			}
 			
@@ -95,7 +97,7 @@ func main() {
 		}
 	}()
 
-	engine, err := proxy.NewEngine(*target, rawLogChan, cfg)
+	engine, err := proxy.NewEngine(*target, rawLogChan, cfg, *configFile)
 	if err != nil {
 		fmt.Printf("Error starting engine: %v\n", err)
 		os.Exit(1)

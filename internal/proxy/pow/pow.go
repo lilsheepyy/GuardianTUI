@@ -39,15 +39,17 @@ func NewSystem(difficulty int, secret string) *System {
 	}
 }
 
-// GenerateChallenge creates a new cryptographically signed challenge for a client
+// GenerateChallenge creates a new cryptographically signed challenge for a client.
+// Now includes a random seed for dynamic WASM verification.
 func (s *System) GenerateChallenge(ip string) string {
 	timestamp := time.Now().Unix()
 	salt := generateRandomString(8)
+	seed := rand.Intn(10000) + 1000
 	
-	// Format: ip:timestamp:salt
-	base := fmt.Sprintf("%s:%d:%s", ip, timestamp, salt)
+	// Format: ip:timestamp:seed:salt
+	base := fmt.Sprintf("%s:%d:%d:%s", ip, timestamp, seed, salt)
 	
-	// Sign it so clients can't forge challenges
+	// Sign it
 	mac := hmac.New(sha256.New, s.config.Secret)
 	mac.Write([]byte(base))
 	signature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
@@ -55,64 +57,84 @@ func (s *System) GenerateChallenge(ip string) string {
 	return fmt.Sprintf("%s:%s", base, signature)
 }
 
-// ValidateSolution checks if the provided solution meets the difficulty for the given challenge
+// ValidateSolution checks if the provided solution meets the difficulty and integrity requirements.
 func (s *System) ValidateSolution(ip, challenge, solutionStr string) bool {
-	// 1. Basic format check
-	parts := strings.Split(challenge, ":")
-	if len(parts) != 4 {
+	// 1. Format check: nonce|envBase64
+	// (Note: proxy.go passes parts[1] which contains "nonce|envBase64")
+	parts := strings.Split(solutionStr, "|")
+	if len(parts) != 2 {
+		return false
+	}
+	nonceStr, envBase64 := parts[0], parts[1]
+
+	// 2. Signature & Integrity Verification
+	cParts := strings.Split(challenge, ":")
+	if len(cParts) != 5 {
 		return false
 	}
 	
-	reqIP, timestampStr, salt, signature := parts[0], parts[1], parts[2], parts[3]
+	reqIP, timestampStr, _, _, signature := cParts[0], cParts[1], cParts[2], cParts[3], cParts[4]
 	
-	// 2. IP matching (prevents challenge farming/sharing)
-	if reqIP != ip {
-		return false
-	}
+	if reqIP != ip { return false }
 	
-	// 3. Expiration check
-	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
-	if err != nil {
-		return false
-	}
-	if time.Since(time.Unix(timestamp, 0)) > s.config.Timeout {
-		return false
-	}
-	
-	// 4. Signature verification (prevents fake challenges)
-	base := fmt.Sprintf("%s:%s:%s", reqIP, timestampStr, salt)
+	// Re-verify signature
+	base := strings.Join(cParts[:4], ":")
 	mac := hmac.New(sha256.New, s.config.Secret)
 	mac.Write([]byte(base))
-	expectedSignature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
-	if signature != expectedSignature {
+	if signature != base64.URLEncoding.EncodeToString(mac.Sum(nil)) {
 		return false
 	}
-	
-	// 5. Replay attack prevention
-	if _, exists := s.cache.Load(challenge); exists {
-		return false // Challenge already solved
+
+	// 3. Expiration
+	ts, _ := strconv.ParseInt(timestampStr, 10, 64)
+	if time.Since(time.Unix(ts, 0)) > s.config.Timeout { return false }
+
+	// 4. Environment Integrity
+	envData, err := base64.StdEncoding.DecodeString(envBase64)
+	if err != nil { return false }
+	if strings.Contains(string(envData), "\"wd\":true") {
+		return false // Bot detected via webdriver:true
 	}
+
+	// 5. Verify the Work
+	// The WASM uses FNV-1a algorithm:
+	// hash = 2166136261
+	// for char in combinedStr: hash = (hash ^ char) * 16777619
+	// finalHash = (hash ^ nonce) * 16777619
+	// target: finalHash < (1 << (32 - difficulty))
 	
-	// 6. Verify the Work
-	solution, err := strconv.Atoi(solutionStr)
+	nonce, err := strconv.ParseUint(nonceStr, 10, 32)
 	if err != nil {
 		return false
 	}
+
+	combinedStr := challenge + string(envData)
 	
-	// The work is: SHA256(challenge + solution) must start with 'Difficulty' number of '0's
-	data := fmt.Sprintf("%s%d", challenge, solution)
-	hash := sha256.Sum256([]byte(data))
-	hashHex := fmt.Sprintf("%x", hash)
-	
-	targetPrefix := strings.Repeat("0", s.config.Difficulty)
-	if strings.HasPrefix(hashHex, targetPrefix) {
-		// Mark as solved
-		s.cache.Store(challenge, time.Now())
-		s.cleanupCache()
-		return true
+	// FNV-1a 32-bit
+	var h uint32 = 2166136261
+	for i := 0; i < len(combinedStr); i++ {
+		h ^= uint32(combinedStr[i])
+		h *= 16777619
 	}
 	
-	return false
+	// Apply nonce
+	h ^= uint32(nonce)
+	h *= 16777619
+	
+	// Check difficulty
+	// For difficulty 24, h must be < 1 << (32 - 24) = 256
+	if s.config.Difficulty > 0 {
+		target := uint32(1) << (32 - uint32(s.config.Difficulty))
+		if h >= target {
+			return false
+		}
+	}
+
+	// Replay protection
+	if _, exists := s.cache.Load(challenge); exists { return false }
+	s.cache.Store(challenge, time.Now())
+	
+	return true
 }
 
 // cleanupCache removes expired challenges from the replay cache
@@ -127,52 +149,60 @@ func (s *System) cleanupCache() {
 	})
 }
 
-// JSInjector returns the JavaScript required to solve the challenge invisibly in the browser
+// GhostWASM is the new WASM binary from the WASM-challenge repository.
+// It performs a math-based PoW challenge-solving algorithm.
+const GhostWASM = "AGFzbQEAAAABCAFgA39/fwF/AwIBAAUDAQABBxICBm1lbW9yeQIABXNvbHZlAAAKYQFfAQN/QQAhAwNAQcW78oh4IQRBACEFA0AgBCAAIAVqLQAAc0GTg4AIbCEEIAVBAWohBSAFIAFIDQALIAQgA3NBk4OACGwhBCAEZyACTwRAIAMPCyADQQFqIQMMAAtBfws="
+
+// JSInjector returns an invisible, automatic challenge page.
 func (s *System) JSInjector(challenge string) string {
 	difficulty := s.config.Difficulty
+	
 	return fmt.Sprintf(`
-<script>
-(function() {
-    // Invisible Proof of Work Solver
-    const challenge = "%s";
-    const difficulty = %d;
-    const targetPrefix = "0".repeat(difficulty);
-    
-    async function sha256(message) {
-        const msgBuffer = new TextEncoder().encode(message);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-    
-    async function solve() {
-        let nonce = 0;
-        while (true) {
-            const hash = await sha256(challenge + nonce);
-            if (hash.startsWith(targetPrefix)) {
-                // Set the solution as a cookie that expires quickly
-                document.cookie = "gtui_pow=" + encodeURIComponent(challenge + "|" + nonce) + "; path=/; max-age=300";
-                // Reload the page automatically to proceed to the destination
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Security Check | GuardianTUI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { background: #050505; color: #00f2ff; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .loader { border: 2px solid #111; border-top: 2px solid #00f2ff; border-radius: 50%%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        .text { font-size: 0.8rem; letter-spacing: 2px; opacity: 0.5; }
+        @keyframes spin { 0%% { transform: rotate(0deg); } 100%% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="loader"></div>
+    <div class="text">INITIALIZING GHOST SHIELD...</div>
+    <script>
+        (async function() {
+            const wasmBase64 = "%s";
+            const challengeStr = "%s";
+            const difficulty = %d;
+            try {
+                const wasmBuffer = Uint8Array.from(atob(wasmBase64), c => c.charCodeAt(0));
+                const { instance } = await WebAssembly.instantiate(wasmBuffer, {});
+                const env = {
+                    wd: navigator.webdriver || false,
+                    hc: navigator.hardwareConcurrency || 0,
+                    dm: window.innerWidth + "x" + window.innerHeight,
+                    tz: new Intl.DateTimeFormat().resolvedOptions().timeZone,
+                };
+                const envStr = JSON.stringify(env);
+                const encoder = new TextEncoder();
+                const bytes = encoder.encode(challengeStr + envStr);
+                const memory = new Uint8Array(instance.exports.memory.buffer);
+                memory.set(bytes);
+                const nonce = instance.exports.solve(0, bytes.length, difficulty);
+                const solution = challengeStr + "|" + nonce + "|" + btoa(envStr);
+                document.cookie = "gtui_pow=" + encodeURIComponent(solution) + "; path=/; Max-Age=3600; SameSite=Lax";
                 window.location.reload();
-                break;
-            }
-            nonce++;
-            
-            // Yield to main thread every 1000 iterations to not freeze the browser
-            if (nonce %% 1000 === 0) {
-                await new Promise(r => setTimeout(r, 0));
-            }
-        }
-    }
-    solve();
-})();
-</script>
-<noscript>Please enable JavaScript to access this site.</noscript>
-<div style="font-family: sans-serif; text-align: center; margin-top: 20vh; color: #666;">
-    <h2>Checking your browser...</h2>
-    <p>Please wait a moment while we verify your connection.</p>
-</div>
-`, challenge, difficulty)
+            } catch (e) { console.error("Shield Error:", e); }
+        })();
+    </script>
+</body>
+</html>
+`, GhostWASM, challenge, difficulty)
 }
 
 func generateRandomString(n int) string {

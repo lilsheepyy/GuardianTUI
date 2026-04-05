@@ -1,4 +1,15 @@
 whitelist: []
+whitelist_fingerprints: []
+blocked_fingerprints:
+    - c863068f7fbceb68
+    - 1e8fd853c85a1d91
+    - 004382a8a59b6907
+    - 6346c51db0cf6667
+    - 45ca31c3315a5978
+    - d855e254fbc46c40
+    - 38b675e13f079dd3
+    - b7fc138804bf2376
+    - 6a9201a2d6c87b01
 blocked_user_agents:
     - CensysInspect
     - zgrab
@@ -81,11 +92,15 @@ ai_protection:
         - admin_password
     score_threshold: 5
 engine:
+    mode: ips
     max_scan_size_bytes: 1048576
     probing_window_seconds: 60
     probing_threshold_unique: 3
     spam_threshold_total: 5
-    pow_enabled: false
-    pow_difficulty: 0
+    pow_enabled: true
+    pow_force: false
+    pow_difficulty: 24
+tui:
+    theme: ""
 telemetry_enabled: true
 telemetry_asked: true

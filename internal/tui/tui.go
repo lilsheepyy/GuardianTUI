@@ -3,8 +3,10 @@ package tui
 import (
 	"fmt"
 	"guardiantui/internal/proxy"
+	"guardiantui/internal/scanner/utils"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -102,10 +104,15 @@ type model struct {
 	lastAlert   string
 	searching   bool
 	searchInput textinput.Model
-	userTheme   string // Store user preference to restore after leaving strict mode
-	theme       Theme
-	suggestion  string
-	suggIdx     int
+	userTheme      string // Store user preference to restore after leaving strict mode
+	theme          Theme
+	suggestion     string
+	suggIdx        int
+	view           string // main, detail, config
+	selectedLog    *proxy.LogEntry
+	configFocus    int
+	configInputs   []textinput.Model
+	configLabels   []string
 
 	// Dashboard Data
 	history        []stats
@@ -134,19 +141,45 @@ func NewModel(logChan chan proxy.LogEntry, engine *proxy.Engine, themeName strin
 
 	t := table.New(table.WithColumns(columns), table.WithFocused(true), table.WithHeight(10))
 
+	// Initialize config inputs
+	labels := []string{"System Mode (ips/ids/strict)", "Max Scan Size (bytes)", "Probing Window (sec)", "Probing Threshold", "Spam Threshold", "Ghost Shield (on/off)", "Shield Difficulty (1-8)", "Honeypots (on/off)"}
+	inputs := make([]textinput.Model, len(labels))
+	for i := range inputs {
+		inputs[i] = textinput.New()
+		inputs[i].Prompt = " > "
+		inputs[i].CharLimit = 32
+	}
+
+	// Fill initial values if engine exists
+	if engine != nil && engine.Config != nil {
+		inputs[0].SetValue(engine.Mode)
+		inputs[1].SetValue(fmt.Sprintf("%d", engine.Config.Engine.MaxScanSize))
+		inputs[2].SetValue(fmt.Sprintf("%d", engine.Config.Engine.ProbingWindow))
+		inputs[3].SetValue(fmt.Sprintf("%d", engine.Config.Engine.ProbingThreshold))
+		inputs[4].SetValue(fmt.Sprintf("%d", engine.Config.Engine.SpamThreshold))
+		powVal := "off"; if engine.Config.Engine.PoWEnabled { powVal = "on" }
+		inputs[5].SetValue(powVal)
+		inputs[6].SetValue(fmt.Sprintf("%d", engine.Config.Engine.PoWDifficulty))
+		hpVal := "off"; if engine.HoneypotsEnabled { hpVal = "on" }
+		inputs[7].SetValue(hpVal)
+	}
+
 	return model{
-		table:       t,
-		logChan:     logChan,
-		engine:      engine,
-		logs:        make([]proxy.LogEntry, 0),
-		searchInput: textinput.New(),
-		history:     make([]stats, 60),
-		maxVal:      10,
-		threatTypes: make(map[string]int),
-		startTime:   time.Now(),
-		userTheme:   strings.ToLower(themeName),
-		theme:       mTheme,
-		suggIdx:     -1,
+		table:        t,
+		logChan:      logChan,
+		engine:       engine,
+		logs:         make([]proxy.LogEntry, 0),
+		searchInput:  textinput.New(),
+		history:      make([]stats, 60),
+		maxVal:       10,
+		threatTypes:  make(map[string]int),
+		startTime:    time.Now(),
+		userTheme:    strings.ToLower(themeName),
+		theme:        mTheme,
+		suggIdx:      -1,
+		view:         "main",
+		configInputs: inputs,
+		configLabels: labels,
 	}
 }
 
@@ -216,13 +249,45 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickEverySecond()
 
 	case tea.KeyMsg:
+		if m.view == "detail" {
+			switch msg.String() {
+			case "esc", "backspace", "q":
+				m.view = "main"
+			}
+			return m, nil
+		}
+
+		if m.view == "config" {
+			switch msg.String() {
+			case "esc":
+				m.view = "main"
+				return m, nil
+			case "tab", "down":
+				m.configInputs[m.configFocus].Blur()
+				m.configFocus = (m.configFocus + 1) % len(m.configInputs)
+				m.configInputs[m.configFocus].Focus()
+			case "shift+tab", "up":
+				m.configInputs[m.configFocus].Blur()
+				m.configFocus--
+				if m.configFocus < 0 { m.configFocus = len(m.configInputs) - 1 }
+				m.configInputs[m.configFocus].Focus()
+			case "enter":
+				m.saveConfigField(m.configFocus)
+			default:
+				var cmd tea.Cmd
+				m.configInputs[m.configFocus], cmd = m.configInputs[m.configFocus].Update(msg)
+				return m, cmd
+			}
+			return m, nil
+		}
+
 		if m.searching {
 			switch msg.String() {
 			case "tab":
 				val := strings.ToLower(m.searchInput.Value())
 				themeList := []string{"cyber", "forest", "dracula", "monochrome"}
 				modeList := []string{"ips", "ids", "strict"}
-				baseCmds := []string{"search ", "themes set ", "modes set ", "pow set ", "honeypots set ", "clear", "quit"}
+				baseCmds := []string{"search ", "themes set ", "modes set ", "shield set ", "honeypots set ", "clear", "quit"}
 				if strings.HasPrefix(val, "themes set ") {
 					m.suggIdx = (m.suggIdx + 1) % len(themeList)
 					m.searchInput.SetValue("themes set " + themeList[m.suggIdx])
@@ -235,10 +300,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.searchInput.SetCursor(len(m.searchInput.Value()))
 					return m, nil
 				}
-				if strings.HasPrefix(val, "pow set ") {
-					powOpts := []string{"on", "off"}
-					m.suggIdx = (m.suggIdx + 1) % len(powOpts)
-					m.searchInput.SetValue("pow set " + powOpts[m.suggIdx])
+				if strings.HasPrefix(val, "shield set ") {
+					shieldOpts := []string{"on", "off"}
+					m.suggIdx = (m.suggIdx + 1) % len(shieldOpts)
+					m.searchInput.SetValue("shield set " + shieldOpts[m.suggIdx])
 					m.searchInput.SetCursor(len(m.searchInput.Value()))
 					return m, nil
 				}
@@ -289,7 +354,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-				} else if strings.HasPrefix(strings.ToLower(val), "pow set ") {
+				} else if strings.HasPrefix(strings.ToLower(val), "shield set ") {
 					parts := strings.Split(val, " ")
 					if len(parts) >= 3 {
 						choice := strings.ToLower(parts[2])
@@ -323,10 +388,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.searching = false
 				m.searchInput.Blur()
+				m.table.Focus()
 				m.updateTable()
 				return m, nil
 			case "esc":
-				m.searching = false; m.searchInput.Blur(); m.updateTable(); return m, nil
+				m.searching = false; m.searchInput.Blur(); m.table.Focus(); m.updateTable(); return m, nil
 			}
 			var tiCmd tea.Cmd
 			m.searchInput, tiCmd = m.searchInput.Update(msg)
@@ -342,6 +408,50 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.suggIdx = -1             // Reset autocomplete
 			m.searchInput.Focus()
 			return m, nil
+		case "c":
+			m.view = "config"
+			m.configFocus = 0
+			m.configInputs[m.configFocus].Focus()
+			return m, nil
+		case "b":
+			if len(m.table.Rows()) > 0 {
+				row := m.table.SelectedRow()
+				ip := row[2]
+				id := row[0]
+				if ip != "" && ip != "INTERNAL" {
+					if m.engine != nil {
+						fp := ""
+						logEntry := m.findLogByID(id)
+						if logEntry != nil {
+							fp = logEntry.Fingerprint
+						}
+						m.engine.BlockPersistent(ip, fp)
+						m.lastAlert = "🛡️ IP & FP MANUALLY BLOCKED: " + ip
+						m.totalBlocks++
+						m.updateTable()
+					}
+				}
+			}
+		case "w":
+			if len(m.table.Rows()) > 0 {
+				id := m.table.SelectedRow()[0]
+				if m.engine != nil {
+					logEntry := m.findLogByID(id)
+					if logEntry != nil && logEntry.Fingerprint != "" {
+						m.engine.WhitelistFingerprintPersistent(logEntry.Fingerprint)
+						m.lastAlert = "✨ FP WHITELISTED: " + logEntry.Fingerprint
+						m.updateTable()
+					}
+				}
+			}
+		case "enter":
+			if len(m.table.Rows()) > 0 {
+				id := m.table.SelectedRow()[0]
+				m.selectedLog = m.findLogByID(id)
+				if m.selectedLog != nil {
+					m.view = "detail"
+				}
+			}
 		case "esc": m.searchInput.SetValue(""); m.updateTable(); return m, nil
 		}
 
@@ -368,6 +478,15 @@ func (m *model) applyTableStyles() {
 	s.Header = s.Header.BorderForeground(m.theme.Dim).Foreground(m.theme.Primary).Bold(true)
 	s.Selected = s.Selected.Foreground(m.theme.Text).Background(m.theme.Accent)
 	m.table.SetStyles(s)
+}
+
+func (m model) findLogByID(id string) *proxy.LogEntry {
+	for i := range m.logs {
+		if m.logs[i].ID == id {
+			return &m.logs[i]
+		}
+	}
+	return nil
 }
 
 func (m *model) updateTable() {
@@ -481,6 +600,127 @@ func (m model) renderActivityChart(width int) string {
 	return styleBox.Width(width).Height(8).Render(b.String())
 }
 
+func (m *model) saveConfigField(idx int) {
+	if m.engine == nil || m.engine.Config == nil { return }
+	val := strings.TrimSpace(m.configInputs[idx].Value())
+	
+	switch idx {
+	case 0: // Mode
+		m.engine.Mode = val
+	case 1: // Max Scan Size
+		if i, err := strconv.Atoi(val); err == nil { m.engine.Config.Engine.MaxScanSize = i }
+	case 2: // Probing Window
+		if i, err := strconv.Atoi(val); err == nil { m.engine.Config.Engine.ProbingWindow = i }
+	case 3: // Probing Threshold
+		if i, err := strconv.Atoi(val); err == nil { m.engine.Config.Engine.ProbingThreshold = i }
+	case 4: // Spam Threshold
+		if i, err := strconv.Atoi(val); err == nil { m.engine.Config.Engine.SpamThreshold = i }
+	case 5: // PoW Enabled
+		m.engine.Config.Engine.PoWEnabled = (val == "on" || val == "true")
+	case 6: // PoW Difficulty
+		if i, err := strconv.Atoi(val); err == nil { m.engine.Config.Engine.PoWDifficulty = i }
+	case 7: // Honeypots
+		m.engine.HoneypotsEnabled = (val == "on" || val == "true")
+	}
+
+	if m.engine.ConfigPath != "" {
+		m.engine.Config.Save(m.engine.ConfigPath)
+	}
+}
+
+func (m model) renderDetail(width, height int) string {
+	if m.selectedLog == nil { return "NO LOG SELECTED" }
+	l := m.selectedLog
+	
+	headerStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true).Underline(true)
+	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Faint(true).Width(15)
+	valueStyle := lipgloss.NewStyle().Foreground(m.theme.Text)
+	boxStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(0, 1).Width(width - 4)
+
+	// Section 1: General Info
+	generalInfo := lipgloss.JoinVertical(lipgloss.Left,
+		headerStyle.Render("EVENT IDENTIFICATION"),
+		lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Incident ID:"), valueStyle.Render(l.ID)),
+		lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Timestamp:"), valueStyle.Render(l.Timestamp.Format(time.RFC1123))),
+		lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Source IP:"), valueStyle.Render(l.RemoteIP)),
+		lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Fingerprint:"), valueStyle.Render(l.Fingerprint)),
+		lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Method:"), valueStyle.Render(l.Method)),
+		lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Path:"), valueStyle.Render(l.Path)),
+	)
+
+	// Section 2: Security Status
+	statusColor := m.theme.Success
+	statusText := "ALLOWED / CLEAN"
+	if l.Blocked {
+		statusColor = m.theme.Alert
+		statusText = "BLOCKED / THREAT"
+	}
+	
+	securityInfo := lipgloss.JoinVertical(lipgloss.Left,
+		headerStyle.Render("SECURITY ANALYSIS"),
+		lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Status:"), lipgloss.NewStyle().Foreground(statusColor).Bold(true).Render(statusText)),
+	)
+	if l.Alert != nil {
+		securityInfo = lipgloss.JoinVertical(lipgloss.Left, securityInfo,
+			lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Threat Type:"), valueStyle.Render(l.Alert.Type)),
+			lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Pattern:"), valueStyle.Render(l.Alert.Pattern)),
+		)
+	}
+
+	// Section 3: Headers
+	var headStr strings.Builder
+	for k, v := range l.FullHeaders {
+		headStr.WriteString(fmt.Sprintf("%s: %s\n", k, strings.Join(v, ", ")))
+	}
+	headersInfo := headerStyle.Render("HTTP HEADERS") + "\n" + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(headStr.String())
+
+	// Section 4: Payloads
+	rawPayload := headerStyle.Render("RAW PAYLOAD") + "\n" + valueStyle.Render(l.Payload)
+	normPayload := headerStyle.Render("DE-OBFUSCATED PAYLOAD") + "\n" + lipgloss.NewStyle().Foreground(m.theme.Accent).Render(utils.Normalize(l.Payload))
+
+	content := lipgloss.JoinVertical(lipgloss.Left,
+		boxStyle.Render(generalInfo),
+		boxStyle.Render(securityInfo),
+		boxStyle.Render(headersInfo),
+		boxStyle.Render(rawPayload),
+		boxStyle.Render(normPayload),
+	)
+
+	title := lipgloss.NewStyle().Background(m.theme.Primary).Foreground(lipgloss.Color("#000")).Padding(0, 2).Bold(true).Render(" 🔍 DEEP INCIDENT INSPECTOR ")
+	footer := lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" [esc/backspace] RETURN TO DASHBOARD")
+	
+	return lipgloss.NewStyle().Padding(1, 2).Render(lipgloss.JoinVertical(lipgloss.Left, title, content, footer))
+}
+
+func (m model) renderConfig(width, height int) string {
+	headerStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true).Padding(0, 1)
+	boxStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.theme.Dim).Padding(1, 2).Width(width - 10)
+	
+	activeLabelStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
+	inactiveLabelStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Faint(true)
+
+	var fields []string
+	for i := range m.configInputs {
+		label := m.configLabels[i]
+		input := m.configInputs[i]
+		
+		if i == m.configFocus {
+			input.PromptStyle = lipgloss.NewStyle().Foreground(m.theme.Accent)
+			fields = append(fields, activeLabelStyle.Render("▶ "+label)+"\n"+input.View())
+		} else {
+			input.PromptStyle = lipgloss.NewStyle().Foreground(m.theme.Dim)
+			fields = append(fields, inactiveLabelStyle.Render("  "+label)+"\n"+input.View())
+		}
+	}
+
+	content := lipgloss.JoinVertical(lipgloss.Left, fields...)
+	
+	title := headerStyle.Background(m.theme.Primary).Foreground(lipgloss.Color("#000")).Render(" ⚙️  INTERACTIVE CONFIGURATION EDITOR ")
+	footer := lipgloss.NewStyle().Foreground(m.theme.Dim).Padding(1, 0).Render(" [tab/shift+tab] NAVIGATE | [enter] APPLY & SAVE | [esc] RETURN ")
+
+	return lipgloss.NewStyle().Padding(2, 4).Render(lipgloss.JoinVertical(lipgloss.Left, title, boxStyle.Render(content), footer))
+}
+
 func truncateString(s string, l int) string {
 	if len(s) <= l { return s }
 	if l <= 3 { return "..." }
@@ -489,6 +729,14 @@ func truncateString(s string, l int) string {
 
 func (m model) View() string {
 	if m.width == 0 || m.height == 0 { return "LOADING MISSION CONTROL..." }
+	
+	switch m.view {
+	case "detail":
+		return m.renderDetail(m.width, m.height)
+	case "config":
+		return m.renderConfig(m.width, m.height)
+	}
+
 	contentWidth := m.width - 8
 	isStrict := m.engine != nil && m.engine.Mode == "strict"
 
@@ -530,8 +778,8 @@ func (m model) View() string {
 	} else if m.searchInput.Value() != "" {
 		termContent = termBorder.Render(lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true).Render(" 🎯 CMD: ") + m.searchInput.Value() + lipgloss.NewStyle().Foreground(m.theme.Dim).Render(" (esc to clear)"))
 	} else {
-		helpText := "[/] TERMINAL | [search <query>] | [themes/modes/pow set <val>]"
-		if m.width > 100 { helpText = "[/] TERMINAL | [search <id/ip/status>] | [themes set <name>] | [modes set <name>] | [pow set <on/off>] | [tab] AUTOCOMPLETE" }
+		helpText := "[/] SEARCH | [c] CONFIG | [b] BLOCK | [w] WHITELIST | [Enter] DETAILS | [q] QUIT"
+		if m.width > 100 { helpText = "[/] SEARCH LOGS | [c] SYSTEM CONFIG | [b] BLOCK IP | [w] WHITELIST FP | [Enter] DETAILS | [q] QUIT | [shield set <on/off>]" }
 		termContent = termBorder.Render(lipgloss.NewStyle().Foreground(m.theme.Dim).Width(contentWidth - 4).Render(helpText))
 	}
 
